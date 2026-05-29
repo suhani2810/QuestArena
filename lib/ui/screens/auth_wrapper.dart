@@ -1,52 +1,47 @@
 // WHAT THIS FILE DOES:
-// Listens to the authStateProvider and switches between Login and Home.
-//
-// KEY CONCEPTS IN THIS FILE:
-// • ref.watch: The modern way to "observe" data and rebuild the UI.
-// • AsyncValue: Riverpod's wrapper for data that might still be loading or has an error.
+// Orchestrates the flow: Login -> Create Profile -> Home.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/auth_providers.dart';
+import '../../providers/user_providers.dart';
 import 'login_screen.dart';
 import 'splash_screen.dart';
+import 'create_profile_screen.dart';
+import 'home_screen.dart';
 
 class AuthWrapper extends ConsumerWidget {
   const AuthWrapper({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // We watch the authStateProvider
     final authState = ref.watch(authStateProvider);
 
     return authState.when(
-      // 1. We have auth data (either a User or null)
-      data: (user) {
-        if (user != null) {
-          // Temporarily show a simple scaffold until we build HomeScreen in Day 4
-          return Scaffold(
-            body: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text('Logged in as ${user.email}'),
-                  ElevatedButton(
-                    onPressed: () => ref.read(authRepositoryProvider).logout(),
-                    child: const Text('Logout'),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }
-        return const LoginScreen();
-      },
-      // 2. We are still checking the auth state
       loading: () => const SplashScreen(),
-      // 3. Something went wrong with the connection
-      error: (e, stack) => Scaffold(
-        body: Center(child: Text('Auth Error: $e')),
-      ),
+      error: (e, s) => Scaffold(body: Center(child: Text('Error: $e'))),
+      data: (user) {
+        if (user == null) return const LoginScreen();
+
+        // If logged in, check if user has a profile document
+        final userProfile = ref.watch(currentUserProvider);
+
+        return userProfile.when(
+          loading: () => const SplashScreen(),
+          // If there's an error (like profile not found or network error),
+          // we go to CreateProfile so the user isn't stuck.
+          error: (e, s) {
+            print('Profile Fetch Error: $e');
+            return const CreateProfileScreen();
+          },
+          data: (profile) {
+            if (profile == null) {
+              return const CreateProfileScreen();
+            }
+            return const HomeScreen();
+          },
+        );
+      },
     );
   }
 }

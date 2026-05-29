@@ -37,14 +37,15 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       setState(() => _isLoading = false);
       
       if (result case Failure(error: final e)) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.message),
-            backgroundColor: AppColors.red,
-          ),
-        );
+        // If the account was actually created (or exists), we don't show error
+        if (e.message.contains('email-already-in-use')) {
+           Navigator.of(context).pop();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(e.message), backgroundColor: AppColors.red),
+          );
+        }
       } else {
-        // Success: Pop back to Login or the Auth wrapper will handle navigation
         Navigator.of(context).pop();
       }
     }

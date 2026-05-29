@@ -1,19 +1,23 @@
 // WHAT THIS FILE DOES:
 // The starting point of the application.
+// Now connected to Firebase using generated options.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:questarena/firebase_options.dart';
 import 'core/constants/colors.dart';
 import 'ui/screens/auth_wrapper.dart';
 
 void main() async {
+  // 1. Ensure Flutter framework is ready
   WidgetsFlutterBinding.ensureInitialized();
   
-  // We try to initialize Firebase. If the student hasn't added 
-  // their google-services.json yet, this will fail, but the app won't crash.
+  // 2. Initialize Firebase using the generated options for the current platform (Android/iOS/Web)
   try {
-    await Firebase.initializeApp();
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
   } catch (e) {
     debugPrint('Firebase Initialization Error: $e');
   }
