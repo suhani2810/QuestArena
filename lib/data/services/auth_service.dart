@@ -1,26 +1,12 @@
 // WHAT THIS FILE DOES:
-// Interacts directly with the Firebase Authentication SDK.
+// Direct communication with Firebase Auth.
 
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
 
 class FirebaseAuthService {
-  // We use a getter to avoid accessing FirebaseAuth.instance immediately
-  FirebaseAuth get _auth {
-    try {
-      return FirebaseAuth.instance;
-    } catch (e) {
-      throw Exception('Firebase not initialized. Please check your setup.');
-    }
-  }
+  final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  Stream<User?> get authStateChanges {
-    try {
-      return _auth.authStateChanges();
-    } catch (e) {
-      return const Stream.empty();
-    }
-  }
+  Stream<User?> get authStateChanges => _auth.authStateChanges();
 
   Future<UserCredential> signUp(String email, String password) async {
     return await _auth.createUserWithEmailAndPassword(
