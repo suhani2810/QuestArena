@@ -10,7 +10,8 @@ class GameUtils {
     return List.generate(6, (index) => chars[Random().nextInt(chars.length)]).join();
   }
 
-  static List<Map<String, dynamic>> getMockQuestions() {
+  // Emergency Fallback questions in case Cloud Function fails
+  static List<Map<String, dynamic>> getFallbackQuestions() {
     return [
       {
         'question': 'Which planet is known as the Red Planet?',
@@ -26,41 +27,6 @@ class GameUtils {
         'question': 'Which is the largest ocean on Earth?',
         'correct_answer': 'Pacific Ocean',
         'incorrect_answers': ['Atlantic Ocean', 'Indian Ocean', 'Arctic Ocean'],
-      },
-      {
-        'question': 'How many continents are there?',
-        'correct_answer': '7',
-        'incorrect_answers': ['5', '6', '8'],
-      },
-      {
-        'question': 'What is the square root of 64?',
-        'correct_answer': '8',
-        'incorrect_answers': ['6', '7', '9'],
-      },
-      {
-        'question': 'Who wrote "Romeo and Juliet"?',
-        'correct_answer': 'William Shakespeare',
-        'incorrect_answers': ['Charles Dickens', 'Mark Twain', 'Jane Austen'],
-      },
-      {
-        'question': 'What is the chemical symbol for gold?',
-        'correct_answer': 'Au',
-        'incorrect_answers': ['Ag', 'Fe', 'Cu'],
-      },
-      {
-        'question': 'Which is the fastest land animal?',
-        'correct_answer': 'Cheetah',
-        'incorrect_answers': ['Lion', 'Gazelle', 'Leopard'],
-      },
-      {
-        'question': 'What is the largest planet in our solar system?',
-        'correct_answer': 'Jupiter',
-        'incorrect_answers': ['Saturn', 'Neptune', 'Earth'],
-      },
-      {
-        'question': 'Which element does "O" represent on the periodic table?',
-        'correct_answer': 'Oxygen',
-        'incorrect_answers': ['Osmium', 'Oganesson', 'Gold'],
       },
     ];
   }

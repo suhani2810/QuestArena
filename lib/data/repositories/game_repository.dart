@@ -25,16 +25,21 @@ class GameRepository {
 
   // Join a private room using a code
   Future<String?> joinPrivateRoom(Map<String, dynamic> player2Data, String code) async {
+    // Look for rooms with this code that are not already active/finished
     final query = await _db
         .collection('gameRooms')
         .where('roomCode', isEqualTo: code)
-        .where('status', isEqualTo: 'waiting')
         .limit(1)
         .get();
 
     if (query.docs.isEmpty) return null;
 
     final doc = query.docs.first;
+    final status = doc.get('status');
+
+    // Only allow joining if it's in a 'waiting' or 'fetching_questions' state
+    if (status != 'waiting' && status != 'fetching_questions') return null;
+
     await doc.reference.update({
       'player2': {...player2Data, 'isReady': false, 'score': 0, 'answers': []},
       'status': 'active', // Room is now full
@@ -82,6 +87,14 @@ class GameRepository {
         '$playerKey.score': currentScore + scoreIncrement,
         '$playerKey.answers': currentAnswers,
       });
+    });
+  }
+
+  // Emergency Fallback: If Cloud Function fails, the client will push mock questions
+  Future<void> triggerQuestionsFallback(String roomId) async {
+    await _db.collection('gameRooms').doc(roomId).update({
+      'questions': GameUtils.getFallbackQuestions(),
+      'status': 'waiting',
     });
   }
 }

@@ -117,7 +117,24 @@ class _GameScreenState extends ConsumerState<GameScreen> with SingleTickerProvid
         error: (e, s) => Center(child: Text('Error: $e')),
         data: (room) {
           if (room == null) return const Center(child: Text('Room Error'));
-          if (room.questions.isEmpty) return const Center(child: Text('Waiting for questions...'));
+          
+          if (room.questions.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const CircularProgressIndicator(color: AppColors.gold),
+                  const SizedBox(height: 24),
+                  Text('Waiting for questions...', style: AppTextStyles.bodyMd),
+                  const SizedBox(height: 40),
+                  TextButton(
+                    onPressed: () => ref.read(gameRepositoryProvider).triggerQuestionsFallback(widget.roomId),
+                    child: Text('TAP HERE IF STUCK (FALLBACK)', style: AppTextStyles.label.copyWith(color: AppColors.gold)),
+                  ),
+                ],
+              ),
+            );
+          }
 
           // Ensure options are ready and timer is reset for the current question
           _prepareOptions(room);

@@ -11,11 +11,18 @@ import '../../../providers/matchmaking_providers.dart';
 import '../matchmaking_screen.dart';
 import '../private_room_screen.dart';
 
-class BattleTab extends ConsumerWidget {
+class BattleTab extends ConsumerStatefulWidget {
   const BattleTab({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<BattleTab> createState() => _BattleTabState();
+}
+
+class _BattleTabState extends ConsumerState<BattleTab> {
+  bool _isStartingMatch = false;
+
+  @override
+  Widget build(BuildContext context) {
     final user = ref.watch(currentUserProvider).value;
 
     return Scaffold(
@@ -32,20 +39,27 @@ class BattleTab extends ConsumerWidget {
               
               _BattleModeCard(
                 title: 'RANKED MATCH',
-                subtitle: 'Compete for XP and Rank',
-                icon: Icons.flash_on_rounded,
+                subtitle: _isStartingMatch ? 'Starting...' : 'Compete for XP and Rank',
+                icon: _isStartingMatch ? Icons.hourglass_bottom_rounded : Icons.flash_on_rounded,
                 color: AppColors.purple,
-                onTap: () async {
+                onTap: _isStartingMatch ? () {} : () async {
                   if (user != null) {
-                    final ticket = MatchmakingModel(
-                      uid: user.uid,
-                      username: user.username,
-                      avatarUrl: user.avatarUrl,
-                      rank: user.rank,
-                      searchStartedAt: DateTime.now(),
-                    );
-                    await ref.read(matchmakingRepositoryProvider).startSearching(ticket);
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => const MatchmakingScreen()));
+                    setState(() => _isStartingMatch = true);
+                    try {
+                      final ticket = MatchmakingModel(
+                        uid: user.uid,
+                        username: user.username,
+                        avatarUrl: user.avatarUrl,
+                        rank: user.rank,
+                        searchStartedAt: DateTime.now(),
+                      );
+                      await ref.read(matchmakingRepositoryProvider).startSearching(ticket);
+                      if (mounted) {
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const MatchmakingScreen()));
+                      }
+                    } finally {
+                      if (mounted) setState(() => _isStartingMatch = false);
+                    }
                   }
                 },
               ),
@@ -57,7 +71,7 @@ class BattleTab extends ConsumerWidget {
                 subtitle: 'Play against a friend',
                 icon: Icons.vpn_key_rounded,
                 color: AppColors.gold,
-                onTap: () {
+                onTap: _isStartingMatch ? () {} : () {
                   Navigator.push(context, MaterialPageRoute(builder: (_) => const PrivateRoomScreen()));
                 },
               ),

@@ -11,6 +11,12 @@ class MatchmakingRepository {
 
   // Start searching for a match
   Future<void> startSearching(MatchmakingModel ticket) async {
+    // 0. Check if a ticket already exists to prevent duplicate entries
+    final existingDoc = await _db.collection('matchmaking').doc(ticket.uid).get();
+    if (existingDoc.exists && existingDoc.get('status') == 'searching') {
+      return; // Already searching
+    }
+
     // 1. Save our ticket
     await _db.collection('matchmaking').doc(ticket.uid).set(ticket.toJson());
 
