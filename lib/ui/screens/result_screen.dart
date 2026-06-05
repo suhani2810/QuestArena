@@ -13,28 +13,77 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../../core/constants/colors.dart';
 import '../../core/constants/text_styles.dart';
 import '../../providers/user_providers.dart';
+import '../../providers/game_providers.dart';
 import '../../data/models/game_room_model.dart';
 
-class ResultScreen extends ConsumerWidget {
+class ResultScreen extends ConsumerStatefulWidget {
   final GameRoomModel room;
   const ResultScreen({super.key, required this.room});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ResultScreen> createState() => _ResultScreenState();
+}
+
+class _ResultScreenState extends ConsumerState<ResultScreen> {
+  bool _rewardsClaimed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _handleRewards();
+  }
+
+  void _handleRewards() async {
+    // Avoid double processing if already handled in this session
+    if (_rewardsClaimed) return;
+
+    final currentUser = ref.read(currentUserProvider).value;
+    if (currentUser == null) return;
+
+    // Check if Firestore already says we claimed it
+    if (widget.room.claimedRewards.contains(currentUser.uid)) {
+      if (mounted) setState(() => _rewardsClaimed = true);
+      return;
+    }
+
+    final isWinner = widget.room.winnerId == currentUser.uid;
+    
+    // 1. Update User Stats in Firestore
+    await ref.read(userRepositoryProvider).updateUserStats(
+      uid: currentUser.uid,
+      xpGained: isWinner ? 50 : 15,
+      coinsGained: isWinner ? 20 : 5,
+      isWin: isWinner,
+    );
+
+    // 2. Mark as claimed in the Game Room doc
+    await ref.read(gameRepositoryProvider).claimRewards(
+      widget.room.roomId,
+      currentUser.uid,
+      isWinner,
+    );
+
+    if (mounted) {
+      setState(() => _rewardsClaimed = true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final currentUser = ref.watch(currentUserProvider).value;
     if (currentUser == null) return const Scaffold();
 
-    final isWinner = room.winnerId == currentUser.uid;
-    final isDraw = room.winnerId == 'draw';
+    final isWinner = widget.room.winnerId == currentUser.uid;
+    final isDraw = widget.room.winnerId == 'draw';
     
     // Determine the player's final score
-    final myScore = currentUser.uid == room.player1['uid'] 
-        ? room.player1['score'] 
-        : (room.player2?['score'] ?? 0);
+    final myScore = currentUser.uid == widget.room.player1['uid'] 
+        ? widget.room.player1['score'] 
+        : (widget.room.player2?['score'] ?? 0);
         
-    final opponentScore = currentUser.uid == room.player1['uid'] 
-        ? (room.player2?['score'] ?? 0)
-        : room.player1['score'];
+    final opponentScore = currentUser.uid == widget.room.player1['uid'] 
+        ? (widget.room.player2?['score'] ?? 0)
+        : widget.room.player1['score'];
 
     return Scaffold(
       body: Stack(
@@ -106,13 +155,15 @@ class ResultScreen extends ConsumerWidget {
                         label: 'XP GAINED', 
                         value: isWinner ? '+50' : '+15', 
                         icon: Icons.trending_up_rounded, 
-                        color: AppColors.purple
+                        color: AppColors.purple,
+                        isProcessing: !_rewardsClaimed,
                       ),
                       _RewardItem(
                         label: 'COINS', 
                         value: isWinner ? '+20' : '+5', 
                         icon: Icons.monetization_on_rounded, 
-                        color: AppColors.gold
+                        color: AppColors.gold,
+                        isProcessing: !_rewardsClaimed,
                       ),
                     ],
                   ).animate().fadeIn(delay: 600.ms),
@@ -121,13 +172,15 @@ class ResultScreen extends ConsumerWidget {
 
                   // Action Buttons
                   ElevatedButton(
-                    onPressed: () => Navigator.of(context).popUntil((route) => route.isFirst),
+                    onPressed: !_rewardsClaimed ? null : () => Navigator.of(context).popUntil((route) => route.isFirst),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.purple,
                       minimumSize: const Size(double.infinity, 56),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     ),
-                    child: const Text('BACK TO HOME', style: TextStyle(fontWeight: FontWeight.bold)),
+                    child: _rewardsClaimed 
+                        ? const Text('BACK TO HOME', style: TextStyle(fontWeight: FontWeight.bold))
+                        : const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)),
                   ),
                 ],
               ),
@@ -162,15 +215,25 @@ class _RewardItem extends StatelessWidget {
   final String value;
   final IconData icon;
   final Color color;
-  const _RewardItem({required this.label, required this.value, required this.icon, required this.color});
+  final bool isProcessing;
+  
+  const _RewardItem({
+    required this.label, 
+    required this.value, 
+    required this.icon, 
+    required this.color,
+    this.isProcessing = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Icon(icon, color: color, size: 28),
+        Icon(icon, color: isProcessing ? Colors.grey : color, size: 28),
         const SizedBox(height: 8),
-        Text(value, style: AppTextStyles.headline.copyWith(fontSize: 20)),
+        isProcessing 
+          ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
+          : Text(value, style: AppTextStyles.headline.copyWith(fontSize: 20)),
         Text(label, style: AppTextStyles.label.copyWith(fontSize: 10)),
       ],
     );

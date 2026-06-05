@@ -13,87 +13,123 @@ class ProfileTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final user = ref.watch(currentUserProvider).value;
-    if (user == null) return const Center(child: CircularProgressIndicator());
+    final userAsync = ref.watch(currentUserProvider);
 
-    // List of all possible achievements to show "Locked" ones
-    final allAchievements = [
-      {'id': 'first_win', 'name': 'First Blood', 'desc': 'Win your first match', 'icon': Icons.flash_on_rounded},
-      {'id': 'on_fire', 'name': 'On Fire', 'desc': 'Win 3 games in a row', 'icon': Icons.whatshot},
-      {'id': 'veteran', 'name': 'Veteran', 'desc': 'Play 100 matches', 'icon': Icons.military_tech},
-      {'id': 'scholar', 'name': 'Scholar', 'desc': 'Get 10/10 in one match', 'icon': Icons.school},
-    ];
+    return userAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator(color: AppColors.gold)),
+      error: (e, s) => Center(child: Text('Error: $e')),
+      data: (user) {
+        if (user == null) return const Center(child: Text('User not found'));
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('PLAYER PROFILE', style: AppTextStyles.display.copyWith(fontSize: 18)),
-        backgroundColor: Colors.transparent,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout_rounded, color: AppColors.red),
-            onPressed: () => ref.read(authRepositoryProvider).logout(),
-          ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          children: [
-            // Header
-            CircleAvatar(radius: 50, backgroundImage: NetworkImage(user.avatarUrl ?? '')),
-            const SizedBox(height: 16),
-            Text(user.username, style: AppTextStyles.headline),
-            Text(user.rank, style: AppTextStyles.label.copyWith(color: AppColors.gold)),
-            
-            const SizedBox(height: 32),
-            
-            // Achievement Grid
-            Text('ACHIEVEMENTS', style: AppTextStyles.label),
-            const SizedBox(height: 16),
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: 1.5,
+        // List of all possible achievements to show "Locked" ones
+        final allAchievements = [
+          {'id': 'first_win', 'name': 'First Blood', 'desc': 'Win your first match', 'icon': Icons.flash_on_rounded},
+          {'id': 'on_fire', 'name': 'On Fire', 'desc': 'Win 3 games in a row', 'icon': Icons.whatshot},
+          {'id': 'veteran', 'name': 'Veteran', 'desc': 'Play 100 matches', 'icon': Icons.military_tech},
+          {'id': 'scholar', 'name': 'Scholar', 'desc': 'Get 10/10 in one match', 'icon': Icons.school},
+        ];
+
+        return Scaffold(
+          appBar: AppBar(
+            title: Text('PLAYER PROFILE', style: AppTextStyles.display.copyWith(fontSize: 18)),
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.logout_rounded, color: AppColors.red),
+                onPressed: () => ref.read(authRepositoryProvider).logout(),
               ),
-              itemCount: allAchievements.length,
-              itemBuilder: (context, index) {
-                final achievement = allAchievements[index];
-                final isUnlocked = user.achievements.contains(achievement['id']);
+            ],
+          ),
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              children: [
+                // Header
+                CircleAvatar(radius: 50, backgroundImage: NetworkImage(user.avatarUrl ?? '')),
+                const SizedBox(height: 16),
+                Text(user.username, style: AppTextStyles.headline),
+                Text(user.rank, style: AppTextStyles.label.copyWith(color: AppColors.gold)),
                 
-                return Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: isUnlocked ? AppColors.cardBg : AppColors.cardBg.withOpacity(0.3),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: isUnlocked ? AppColors.gold : AppColors.surface),
+                const SizedBox(height: 32),
+                
+                // Stats Summary (Added for better visibility)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _ProfileStat(label: 'LEVEL', value: '${user.level}'),
+                    _ProfileStat(label: 'WINS', value: '${user.totalWins}'),
+                    _ProfileStat(label: 'COINS', value: '${user.coins}'),
+                  ],
+                ),
+
+                const SizedBox(height: 40),
+                
+                // Achievement Grid
+                Text('ACHIEVEMENTS', style: AppTextStyles.label),
+                const SizedBox(height: 16),
+                GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    childAspectRatio: 1.5,
                   ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        achievement['icon'] as IconData, 
-                        color: isUnlocked ? AppColors.gold : AppColors.textMuted,
+                  itemCount: allAchievements.length,
+                  itemBuilder: (context, index) {
+                    final achievement = allAchievements[index];
+                    final isUnlocked = user.achievements.contains(achievement['id']);
+                    
+                    return Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isUnlocked ? AppColors.cardBg : AppColors.cardBg.withOpacity(0.3),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: isUnlocked ? AppColors.gold : AppColors.surface),
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        achievement['name'] as String, 
-                        style: AppTextStyles.bodyMd.copyWith(
-                          fontSize: 14,
-                          color: isUnlocked ? AppColors.textPrimary : AppColors.textMuted,
-                        ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            achievement['icon'] as IconData, 
+                            color: isUnlocked ? AppColors.gold : AppColors.textMuted,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            achievement['name'] as String, 
+                            style: AppTextStyles.bodyMd.copyWith(
+                              fontSize: 14,
+                              color: isUnlocked ? AppColors.textPrimary : AppColors.textMuted,
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                );
-              },
+                    );
+                  },
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ProfileStat extends StatelessWidget {
+  final String label;
+  final String value;
+  const _ProfileStat({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(value, style: AppTextStyles.headline.copyWith(color: AppColors.gold, fontSize: 24)),
+        Text(label, style: AppTextStyles.label.copyWith(fontSize: 10)),
+      ],
     );
   }
 }
