@@ -1,1 +1,41 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"questarena-35867","appId":"1:936772215906:android:9cdef38e2354cbedeb9d3b","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"questarena-35867","configurations":{"android":"1:936772215906:android:9cdef38e2354cbedeb9d3b","ios":"1:936772215906:ios:e9a95ab2922f29b2eb9d3b","macos":"1:936772215906:ios:e9a95ab2922f29b2eb9d3b","web":"1:936772215906:web:7f266c87345a8293eb9d3b","windows":"1:936772215906:web:485f403b5ea76aa5eb9d3b"}}}}}}
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "questarena-35867",
+          "appId": "1:936772215906:android:9cdef38e2354cbedeb9d3b",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "questarena-35867",
+          "configurations": {
+            "android": "1:936772215906:android:9cdef38e2354cbedeb9d3b",
+            "ios": "1:936772215906:ios:e9a95ab2922f29b2eb9d3b",
+            "macos": "1:936772215906:ios:e9a95ab2922f29b2eb9d3b",
+            "web": "1:936772215906:web:7f266c87345a8293eb9d3b",
+            "windows": "1:936772215906:web:485f403b5ea76aa5eb9d3b"
+          }
+        }
+      }
+    }
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ],
+      "predeploy": [
+        "npm --prefix functions run build"
+      ]
+    }
+  ]
+}

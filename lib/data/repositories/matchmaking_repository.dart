@@ -36,11 +36,11 @@ class MatchmakingRepository {
       await _db.collection('gameRooms').doc(roomId).set({
         'roomId': roomId,
         'roomCode': '', // Not needed for public matchmaking
-        'status': 'waiting',
+        'status': 'fetching_questions', // Intermediate status while CF runs
         'player1': {...player1Data, 'isReady': false, 'score': 0, 'answers': []},
         'player2': {...player2Data, 'isReady': false, 'score': 0, 'answers': []},
         'createdAt': FieldValue.serverTimestamp(),
-        'questions': GameUtils.getMockQuestions(),
+        'questions': [],
       });
 
       // 4. Update both tickets to 'matched'

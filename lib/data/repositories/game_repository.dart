@@ -14,11 +14,11 @@ class GameRepository {
     await _db.collection('gameRooms').doc(roomId).set({
       'roomId': roomId,
       'roomCode': code,
-      'status': 'waiting',
+      'status': 'fetching_questions',
       'player1': {...player1Data, 'isReady': false, 'score': 0, 'answers': []},
       'player2': null,
       'createdAt': FieldValue.serverTimestamp(),
-      'questions': GameUtils.getMockQuestions(), 
+      'questions': [], // Let Cloud Functions populate this
     });
     return roomId;
   }
