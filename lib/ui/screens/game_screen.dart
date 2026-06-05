@@ -162,7 +162,6 @@ class _GameScreenState extends ConsumerState<GameScreen> with SingleTickerProvid
                         name: room.player1['username'], 
                         score: room.player1['score'] ?? 0, 
                         isLeft: true,
-                        timer: _timerController,
                         hasAnswered: (room.player1['answers'] as List).length > room.currentQuestionIndex,
                       ),
                       Text('${room.currentQuestionIndex + 1}/${room.questions.length}', style: AppTextStyles.label),
@@ -170,7 +169,6 @@ class _GameScreenState extends ConsumerState<GameScreen> with SingleTickerProvid
                         name: room.player2?['username'] ?? 'Opponent', 
                         score: room.player2?['score'] ?? 0,
                         isLeft: false,
-                        timer: _timerController,
                         hasAnswered: (room.player2?['answers'] as List? ?? []).length > room.currentQuestionIndex,
                       ),
                     ],
@@ -221,14 +219,12 @@ class _PlayerScore extends StatelessWidget {
   final String name;
   final int score;
   final bool isLeft;
-  final AnimationController timer;
   final bool hasAnswered;
 
   const _PlayerScore({
     required this.name, 
     required this.score, 
     required this.isLeft,
-    required this.timer,
     required this.hasAnswered,
   });
 
@@ -244,19 +240,6 @@ class _PlayerScore extends StatelessWidget {
           color: hasAnswered ? AppColors.teal : AppColors.gold,
           fontSize: 20,
         )),
-        const SizedBox(height: 4),
-        SizedBox(
-          width: 60,
-          child: AnimatedBuilder(
-            animation: timer,
-            builder: (context, child) => LinearProgressIndicator(
-              value: hasAnswered ? 0 : timer.value,
-              backgroundColor: AppColors.surface,
-              color: hasAnswered ? AppColors.teal : (timer.value < 0.3 ? AppColors.red : AppColors.purple),
-              minHeight: 3,
-            ),
-          ),
-        ),
       ],
     );
   }

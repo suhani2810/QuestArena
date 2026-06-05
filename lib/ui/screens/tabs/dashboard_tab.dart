@@ -164,28 +164,25 @@ class DashboardTab extends ConsumerWidget {
             Text('RECENT HISTORY', style: AppTextStyles.label),
             const SizedBox(height: 12),
             
-            // Mock history list
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: 2,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
-              itemBuilder: (context, index) => Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppColors.cardBg,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Row(
-                  children: [
-                    Icon(index == 0 ? Icons.emoji_events_rounded : Icons.close_rounded, 
-                         color: index == 0 ? AppColors.teal : AppColors.red),
-                    const SizedBox(width: 12),
-                    Text(index == 0 ? 'Won against ProGamer' : 'Lost to QuizMaster', style: AppTextStyles.bodyMd),
-                    const Spacer(),
-                    Text(index == 0 ? '+50 XP' : '+15 XP', style: AppTextStyles.label),
-                  ],
-                ),
+            // Empty State since match history is not yet implemented in Firestore
+            Container(
+              padding: const EdgeInsets.all(24),
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: AppColors.cardBg,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.surface, style: BorderStyle.solid),
+              ),
+              child: Column(
+                children: [
+                  Icon(Icons.history_rounded, color: AppColors.textMuted, size: 32),
+                  const SizedBox(height: 12),
+                  Text(
+                    'No match history yet.\nStart a battle to see your results!',
+                    style: AppTextStyles.label.copyWith(color: AppColors.textMuted),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
               ),
             ),
           ],
