@@ -137,8 +137,8 @@ class _GameScreenState extends ConsumerState<GameScreen> with SingleTickerProvid
                       ),
                       Text('${room.currentQuestionIndex + 1}/10', style: AppTextStyles.label),
                       _PlayerScore(
-                        name: room.player2['username'], 
-                        score: room.player2['score'] ?? 0, 
+                        name: room.player2?['username'] ?? 'Opponent', 
+                        score: room.player2?['score'] ?? 0,
                         isLeft: false
                       ),
                     ],

@@ -62,7 +62,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
           final p2 = room.player2;
           
           // If both players are ready, start the timer
-          if (p1['isReady'] == true && p2['isReady'] == true) {
+          if (p1['isReady'] == true && p2 != null && p2['isReady'] == true) {
             _startCountdown();
           }
 
@@ -92,15 +92,27 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                     child: Container(
                       width: double.infinity,
                       color: AppColors.gold.withAlpha(12),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          _ReadyBadge(isReady: p2['isReady'] ?? false),
-                          const SizedBox(height: 16),
-                          Text(p2['username'], style: AppTextStyles.headline),
-                          CircleAvatar(radius: 60, backgroundImage: NetworkImage(p2['avatarUrl'] ?? '')),
-                        ],
-                      ),
+                      child: p2 == null 
+                        ? Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const CircularProgressIndicator(color: AppColors.gold),
+                              const SizedBox(height: 24),
+                              Text('WAITING FOR OPPONENT', style: AppTextStyles.label),
+                              const SizedBox(height: 8),
+                              Text('ROOM CODE:', style: AppTextStyles.label.copyWith(fontSize: 10)),
+                              Text(room.roomCode, style: AppTextStyles.display.copyWith(color: AppColors.gold, fontSize: 32)),
+                            ],
+                          )
+                        : Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              _ReadyBadge(isReady: p2['isReady'] ?? false),
+                              const SizedBox(height: 16),
+                              Text(p2['username'], style: AppTextStyles.headline),
+                              CircleAvatar(radius: 60, backgroundImage: NetworkImage(p2['avatarUrl'] ?? '')),
+                            ],
+                          ),
                     ),
                   ),
                 ],
@@ -116,7 +128,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
               ),
 
               // Countdown Overlay
-              if (p1['isReady'] == true && p2['isReady'] == true)
+              if (p1['isReady'] == true && p2 != null && p2['isReady'] == true)
                 Container(
                   color: Colors.black54,
                   child: Center(
@@ -128,7 +140,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                 ),
 
               // Ready Button
-              if (!(p1['isReady'] == true && p2['isReady'] == true))
+              if (p2 != null && !(p1['isReady'] == true && p2['isReady'] == true))
                 Positioned(
                   bottom: 40,
                   left: 40,

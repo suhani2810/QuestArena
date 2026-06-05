@@ -3,9 +3,10 @@
 
 class GameRoomModel {
   final String roomId;
+  final String roomCode;
   final String status;
   final Map<String, dynamic> player1;
-  final Map<String, dynamic> player2;
+  final Map<String, dynamic>? player2;
   final List<dynamic> questions;
   final int currentQuestionIndex;
   final DateTime? questionDeadline;
@@ -13,9 +14,10 @@ class GameRoomModel {
 
   GameRoomModel({
     required this.roomId,
+    this.roomCode = '',
     required this.status,
     required this.player1,
-    required this.player2,
+    this.player2,
     required this.questions,
     this.currentQuestionIndex = 0,
     this.questionDeadline,
@@ -25,9 +27,10 @@ class GameRoomModel {
   factory GameRoomModel.fromJson(Map<String, dynamic> json) {
     return GameRoomModel(
       roomId: json['roomId'] ?? '',
+      roomCode: json['roomCode'] ?? '',
       status: json['status'] ?? 'waiting',
       player1: Map<String, dynamic>.from(json['player1'] ?? {}),
-      player2: Map<String, dynamic>.from(json['player2'] ?? {}),
+      player2: json['player2'] != null ? Map<String, dynamic>.from(json['player2']) : null,
       questions: List<dynamic>.from(json['questions'] ?? []),
       currentQuestionIndex: json['currentQuestionIndex'] ?? 0,
       questionDeadline: json['questionDeadline'] != null 
@@ -39,6 +42,7 @@ class GameRoomModel {
 
   Map<String, dynamic> toJson() => {
     'roomId': roomId,
+    'roomCode': roomCode,
     'status': status,
     'player1': player1,
     'player2': player2,

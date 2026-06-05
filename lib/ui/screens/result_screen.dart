@@ -30,10 +30,10 @@ class ResultScreen extends ConsumerWidget {
     // Determine the player's final score
     final myScore = currentUser.uid == room.player1['uid'] 
         ? room.player1['score'] 
-        : room.player2['score'];
+        : (room.player2?['score'] ?? 0);
         
     final opponentScore = currentUser.uid == room.player1['uid'] 
-        ? room.player2['score'] 
+        ? (room.player2?['score'] ?? 0)
         : room.player1['score'];
 
     return Scaffold(
