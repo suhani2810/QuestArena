@@ -5,6 +5,8 @@
 // • Data Modeling: Translating a JSON/Firestore document into a safe Dart object.
 // • Immutability: Using 'final' ensures that once a user object is created, it cannot be accidentally changed.
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class UserModel {
   final String uid;
   final String username;
@@ -12,11 +14,17 @@ class UserModel {
   final String? avatarUrl;
   final int level;
   final int xp;
-  final int xpToNextLevel;
-  final int coins;
-  final int totalWins;
-  final int totalLosses;
   final String rank;
+  final int? subRank;
+  final int rankPoints;
+  final int coins;
+  final int wins;
+  final int losses;
+  final int draws;
+  final int matchesPlayed;
+  final int currentWinStreak;
+  final int highestWinStreak;
+  final DateTime? lastDailyBonusDate;
   final List<String> achievements;
 
   UserModel({
@@ -26,16 +34,29 @@ class UserModel {
     this.avatarUrl,
     this.level = 1,
     this.xp = 0,
-    this.xpToNextLevel = 100,
+    this.rank = 'Unranked',
+    this.subRank,
+    this.rankPoints = 0,
     this.coins = 0,
-    this.totalWins = 0,
-    this.totalLosses = 0,
-    this.rank = 'Bronze',
+    this.wins = 0,
+    this.losses = 0,
+    this.draws = 0,
+    this.matchesPlayed = 0,
+    this.currentWinStreak = 0,
+    this.highestWinStreak = 0,
+    this.lastDailyBonusDate,
     this.achievements = const [],
   });
 
-  // Manual JSON conversion for Day 1 (to avoid code-gen errors)
   factory UserModel.fromJson(Map<String, dynamic> json) {
+    final rank = json['rank'] ?? 'Unranked';
+    int? subRank = json['subRank'];
+
+    // Migration logic: If the user has a rank but no subRank, default to 3
+    if (subRank == null && rank != 'Unranked' && rank != 'Legend') {
+      subRank = 3;
+    }
+
     return UserModel(
       uid: json['uid'] ?? '',
       username: json['username'] ?? '',
@@ -43,11 +64,19 @@ class UserModel {
       avatarUrl: json['avatarUrl'],
       level: json['level'] ?? 1,
       xp: json['xp'] ?? 0,
-      xpToNextLevel: json['xpToNextLevel'] ?? 100,
+      rank: rank,
+      subRank: subRank,
+      rankPoints: json['rankPoints'] ?? 0,
       coins: json['coins'] ?? 0,
-      totalWins: json['totalWins'] ?? 0,
-      totalLosses: json['totalLosses'] ?? 0,
-      rank: json['rank'] ?? 'Bronze',
+      wins: json['wins'] ?? json['totalWins'] ?? 0,
+      losses: json['losses'] ?? json['totalLosses'] ?? 0,
+      draws: json['draws'] ?? 0,
+      matchesPlayed: json['matchesPlayed'] ?? 0,
+      currentWinStreak: json['currentWinStreak'] ?? 0,
+      highestWinStreak: json['highestWinStreak'] ?? 0,
+      lastDailyBonusDate: json['lastDailyBonusDate'] != null
+          ? (json['lastDailyBonusDate'] as Timestamp).toDate()
+          : null,
       achievements: List<String>.from(json['achievements'] ?? []),
     );
   }
@@ -59,11 +88,19 @@ class UserModel {
         'avatarUrl': avatarUrl,
         'level': level,
         'xp': xp,
-        'xpToNextLevel': xpToNextLevel,
-        'coins': coins,
-        'totalWins': totalWins,
-        'totalLosses': totalLosses,
         'rank': rank,
+        'subRank': subRank,
+        'rankPoints': rankPoints,
+        'coins': coins,
+        'wins': wins,
+        'losses': losses,
+        'draws': draws,
+        'matchesPlayed': matchesPlayed,
+        'currentWinStreak': currentWinStreak,
+        'highestWinStreak': highestWinStreak,
+        'lastDailyBonusDate': lastDailyBonusDate != null
+            ? Timestamp.fromDate(lastDailyBonusDate!)
+            : null,
         'achievements': achievements,
       };
 
@@ -71,8 +108,20 @@ class UserModel {
     String? username,
     String? avatarUrl,
     int? xp,
-    int? coins,
+    int? level,
     String? rank,
+    int? subRank,
+    int? rankPoints,
+    int? coins,
+    int? wins,
+    int? losses,
+    int? draws,
+    int? matchesPlayed,
+    int? currentWinStreak,
+    int? highestWinStreak,
+    DateTime? lastDailyBonusDate,
+    List<String>? achievements,
+    bool clearSubRank = false,
   }) {
     return UserModel(
       uid: uid,
@@ -80,12 +129,19 @@ class UserModel {
       username: username ?? this.username,
       avatarUrl: avatarUrl ?? this.avatarUrl,
       xp: xp ?? this.xp,
-      coins: coins ?? this.coins,
+      level: level ?? this.level,
       rank: rank ?? this.rank,
-      level: level,
-      totalWins: totalWins,
-      totalLosses: totalLosses,
-      achievements: achievements,
+      subRank: clearSubRank ? null : (subRank ?? this.subRank),
+      rankPoints: rankPoints ?? this.rankPoints,
+      coins: coins ?? this.coins,
+      wins: wins ?? this.wins,
+      losses: losses ?? this.losses,
+      draws: draws ?? this.draws,
+      matchesPlayed: matchesPlayed ?? this.matchesPlayed,
+      currentWinStreak: currentWinStreak ?? this.currentWinStreak,
+      highestWinStreak: highestWinStreak ?? this.highestWinStreak,
+      lastDailyBonusDate: lastDailyBonusDate ?? this.lastDailyBonusDate,
+      achievements: achievements ?? this.achievements,
     );
   }
 }

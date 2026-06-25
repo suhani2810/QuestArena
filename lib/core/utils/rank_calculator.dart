@@ -4,6 +4,8 @@
 import 'dart:ui';
 import '../constants/colors.dart';
 
+import 'level_system.dart';
+
 class RankCalculator {
   static String getRank(int xp) {
     if (xp >= 10000) return 'Diamond';
@@ -23,8 +25,9 @@ class RankCalculator {
     }
   }
 
-  // Formula: Every level requires 100 more XP than the last
+  /// Returns the XP required to reach the next level from [currentLevel].
+  /// Now delegates to the central [LevelSystem].
   static int getXpToNextLevel(int currentLevel) {
-    return 100 * currentLevel;
+    return LevelSystem.xpForNextLevel(currentLevel);
   }
 }
