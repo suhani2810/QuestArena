@@ -199,9 +199,20 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
                   const SizedBox(height: 16),
 
                   Text(
-                    isDraw ? "IT'S A DRAW!" : (widget.room.isArenaBreakerWin ? 'WINNER BY ARENA BREAKER' : (isWinner ? 'VICTORY!' : 'DEFEAT')),
+                    isDraw
+                        ? "IT'S A DRAW!"
+                        : (widget.room.forfeitWinnerId != null
+                            ? (widget.room.forfeitWinnerId == currentUser.uid
+                                ? '🏆 WINNER BY FORFEIT'
+                                : 'MATCH FORFEITED')
+                            : (widget.room.isArenaBreakerWin
+                                ? 'WINNER BY ARENA BREAKER'
+                                : (isWinner ? 'VICTORY!' : 'DEFEAT'))),
                     style: AppTextStyles.display.copyWith(
-                      fontSize: widget.room.isArenaBreakerWin ? 24 : 36,
+                      fontSize: (widget.room.isArenaBreakerWin ||
+                              widget.room.forfeitWinnerId != null)
+                          ? 24
+                          : 36,
                       color: isWinner ? AppColors.teal : AppColors.red,
                     ),
                     textAlign: TextAlign.center,

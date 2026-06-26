@@ -24,6 +24,10 @@ class GameRoomModel {
   final bool isArenaBreakerWin;
   final String? arenaBreakerStatusMessage;
 
+  // Disconnect & Forfeit Fields
+  final Map<String, dynamic> presence;
+  final String? forfeitWinnerId;
+
   GameRoomModel({
     required this.roomId,
     this.roomCode = '',
@@ -44,6 +48,8 @@ class GameRoomModel {
     this.arenaBreakerSubmissions = const {},
     this.isArenaBreakerWin = false,
     this.arenaBreakerStatusMessage,
+    this.presence = const {},
+    this.forfeitWinnerId,
   });
 
   factory GameRoomModel.fromJson(Map<String, dynamic> json) {
@@ -69,6 +75,8 @@ class GameRoomModel {
       arenaBreakerSubmissions: Map<String, dynamic>.from(json['arenaBreakerSubmissions'] ?? {}),
       isArenaBreakerWin: json['isArenaBreakerWin'] ?? false,
       arenaBreakerStatusMessage: json['arenaBreakerStatusMessage'],
+      presence: Map<String, dynamic>.from(json['presence'] ?? {}),
+      forfeitWinnerId: json['forfeitWinnerId'],
     );
   }
 
@@ -92,5 +100,7 @@ class GameRoomModel {
     'arenaBreakerSubmissions': arenaBreakerSubmissions,
     'isArenaBreakerWin': isArenaBreakerWin,
     'arenaBreakerStatusMessage': arenaBreakerStatusMessage,
+    'presence': presence,
+    'forfeitWinnerId': forfeitWinnerId,
   };
 }

@@ -1,6 +1,6 @@
 // WHAT THIS FILE DOES:
 // Optimized core quiz screen. Isolated rebuilds for maximum performance.
-// Includes Arena Breaker tie-breaker mode integration.
+// Includes Arena Breaker tie-breaker mode and Disconnect/Forfeit handling.
 
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -23,7 +23,7 @@ class GameScreen extends ConsumerStatefulWidget {
 }
 
 class _GameScreenState extends ConsumerState<GameScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late AnimationController _timerController;
   String? _selectedAnswer;
   bool _hasAnswered = false;
@@ -34,9 +34,17 @@ class _GameScreenState extends ConsumerState<GameScreen>
   // Arena Breaker state
   bool _showABIntro = true;
 
+  // Forfeit/Disconnect state
+  int _forfeitCountdown = 20;
+  Timer? _forfeitTimer;
+  bool _isOpponentDisconnected = false;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _updatePresence(true);
+
     _timerController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 15),
@@ -56,8 +64,77 @@ class _GameScreenState extends ConsumerState<GameScreen>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _updatePresence(false);
+    _forfeitTimer?.cancel();
     _timerController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _updatePresence(true);
+    } else {
+      _updatePresence(false);
+    }
+  }
+
+  void _updatePresence(bool isOnline) {
+    final user = ref.read(currentUserProvider).value;
+    if (user != null) {
+      ref.read(gameRepositoryProvider).updatePresence(widget.roomId, user.uid, isOnline);
+    }
+  }
+
+  void _startForfeitTimer() {
+    _forfeitTimer?.cancel();
+    setState(() => _forfeitCountdown = 20);
+    _forfeitTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_forfeitCountdown > 0) {
+        setState(() => _forfeitCountdown--);
+      } else {
+        _forfeitTimer?.cancel();
+        _declareForfeitVictory();
+      }
+    });
+  }
+
+  void _declareForfeitVictory() {
+    final user = ref.read(currentUserProvider).value;
+    if (user != null) {
+      ref.read(gameRepositoryProvider).handleForfeit(widget.roomId, user.uid);
+    }
+  }
+
+  void _handleLeaveMatch() async {
+    final room = ref.read(gameRoomProvider(widget.roomId)).value;
+    final user = ref.read(currentUserProvider).value;
+    if (room == null || user == null) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.cardBg,
+        title: Text('LEAVE MATCH?', style: AppTextStyles.headline.copyWith(color: AppColors.red)),
+        content: const Text('Leaving now counts as a forfeit. Your opponent will win immediately.', style: TextStyle(color: Colors.white)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('CANCEL')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.red),
+            child: const Text('LEAVE', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      final opponentId = user.uid == room.player1['uid'] 
+          ? (room.player2?['uid'] ?? '') 
+          : room.player1['uid'];
+      await ref.read(gameRepositoryProvider).leaveMatch(widget.roomId, user.uid, opponentId);
+    }
   }
 
   void _prepareOptions(GameRoomModel room) {
@@ -135,18 +212,56 @@ class _GameScreenState extends ConsumerState<GameScreen>
 
   @override
   Widget build(BuildContext context) {
-    // Listen for completion to navigate away
-    ref.listen(gameRoomProvider(widget.roomId), (prev, next) {
-      if (next.value?.status == 'finished') {
+    final user = ref.watch(currentUserProvider).value;
+    if (user == null) return const Scaffold();
+
+    // Listen for room updates
+    ref.listen<AsyncValue<GameRoomModel?>>(gameRoomProvider(widget.roomId), (prev, next) {
+      final room = next.value;
+      if (room == null) return;
+
+      // Handle match finish
+      if (room.status == 'finished') {
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => ResultScreen(room: next.value!)),
+          MaterialPageRoute(builder: (_) => ResultScreen(room: room)),
         );
+        return;
+      }
+
+      // Presence Detection
+      final String p1Uid = room.player1['uid'] ?? '';
+      final String? p2Uid = room.player2?['uid'];
+      final String? opponentId = user.uid == p1Uid ? p2Uid : p1Uid;
+      
+      if (opponentId != null) {
+        final opponentPresence = room.presence[opponentId];
+        final isOnline = opponentPresence?['isOnline'] ?? true;
+
+        if (!isOnline && !_isOpponentDisconnected) {
+          _isOpponentDisconnected = true;
+          _startForfeitTimer();
+        } else if (isOnline && _isOpponentDisconnected) {
+          _isOpponentDisconnected = false;
+          _forfeitTimer?.cancel();
+        }
       }
     });
 
     final roomAsync = ref.watch(gameRoomProvider(widget.roomId));
 
     return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.close_rounded, color: AppColors.textMuted),
+          onPressed: _handleLeaveMatch,
+        ),
+        title: _isOpponentDisconnected 
+          ? Text('OPPONENT DISCONNECTED', style: AppTextStyles.label.copyWith(color: AppColors.red, fontSize: 10))
+          : null,
+        centerTitle: true,
+      ),
       body: roomAsync.when(
         loading: () => const Center(
             child: CircularProgressIndicator(color: AppColors.gold)),
@@ -154,131 +269,158 @@ class _GameScreenState extends ConsumerState<GameScreen>
         data: (room) {
           if (room == null) return const Center(child: Text('Room Error'));
 
-          // ARENA BREAKER MODE UI
-          if (room.status == 'arena_breaker') {
-            return _buildArenaBreakerUI(room);
-          }
+          return Stack(
+            children: [
+              // Main Game UI
+              _buildMainUI(room),
 
-          if (room.questions.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+              // Opponent Disconnect Banner
+              if (_isOpponentDisconnected)
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: Container(
+                    color: AppColors.red.withValues(alpha: 0.9),
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text('Opponent disconnected.', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                        Text('Ending match in $_forfeitCountdown seconds...', style: const TextStyle(fontSize: 12, color: Colors.white)),
+                      ],
+                    ),
+                  ).animate().slideY(begin: -1, end: 0),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildMainUI(GameRoomModel room) {
+    if (room.status == 'arena_breaker') {
+      return _buildArenaBreakerUI(room);
+    }
+
+    if (room.questions.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const CircularProgressIndicator(color: AppColors.gold),
+            const SizedBox(height: 24),
+            Text('Waiting for questions...', style: AppTextStyles.bodyMd),
+            const SizedBox(height: 40),
+            TextButton(
+              onPressed: () => ref
+                  .read(gameRepositoryProvider)
+                  .triggerQuestionsFallback(widget.roomId),
+              child: Text('TAP HERE IF STUCK (FALLBACK)',
+                  style:
+                      AppTextStyles.label.copyWith(color: AppColors.gold)),
+            ),
+          ],
+        ),
+      );
+    }
+
+    _prepareOptions(room);
+    final question = room.questions[room.currentQuestionIndex];
+    final qText = GameUtils.decodeHtmlEntities(question['question']);
+
+    return SafeArea(
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            children: [
+              // Header with scores
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const CircularProgressIndicator(color: AppColors.gold),
-                  const SizedBox(height: 24),
-                  Text('Waiting for questions...', style: AppTextStyles.bodyMd),
-                  const SizedBox(height: 40),
-                  TextButton(
-                    onPressed: () => ref
-                        .read(gameRepositoryProvider)
-                        .triggerQuestionsFallback(widget.roomId),
-                    child: Text('TAP HERE IF STUCK (FALLBACK)',
-                        style:
-                            AppTextStyles.label.copyWith(color: AppColors.gold)),
+                  _PlayerScore(
+                    name: room.player1['username'],
+                    score: room.player1['score'] ?? 0,
+                    isLeft: true,
+                    hasAnswered: (room.player1['answers'] as List).length >
+                        room.currentQuestionIndex,
+                  ),
+                  Text(
+                      '${room.currentQuestionIndex + 1}/${room.questions.length}',
+                      style: AppTextStyles.label),
+                  _PlayerScore(
+                    name: room.player2?['username'] ?? 'Opponent',
+                    score: room.player2?['score'] ?? 0,
+                    isLeft: false,
+                    hasAnswered:
+                        (room.player2?['answers'] as List? ?? []).length >
+                            room.currentQuestionIndex,
                   ),
                 ],
               ),
-            );
-          }
+              const SizedBox(height: 40),
 
-          _prepareOptions(room);
-          final question = room.questions[room.currentQuestionIndex];
-          final qText = GameUtils.decodeHtmlEntities(question['question']);
-
-          return SafeArea(
-            child: SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.all(24.0),
-                child: Column(
-                  children: [
-                    // Header with scores
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        _PlayerScore(
-                          name: room.player1['username'],
-                          score: room.player1['score'] ?? 0,
-                          isLeft: true,
-                          hasAnswered: (room.player1['answers'] as List).length >
-                              room.currentQuestionIndex,
-                        ),
-                        Text(
-                            '${room.currentQuestionIndex + 1}/${room.questions.length}',
-                            style: AppTextStyles.label),
-                        _PlayerScore(
-                          name: room.player2?['username'] ?? 'Opponent',
-                          score: room.player2?['score'] ?? 0,
-                          isLeft: false,
-                          hasAnswered:
-                              (room.player2?['answers'] as List? ?? []).length >
-                                  room.currentQuestionIndex,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 40),
-
-                    // Timer bar
-                    RepaintBoundary(
-                      child: AnimatedBuilder(
-                        animation: _timerController,
-                        builder: (context, child) => LinearProgressIndicator(
-                          value: _timerController.value,
-                          backgroundColor: AppColors.surface,
-                          color: _timerController.value < 0.3
-                              ? AppColors.red
-                              : AppColors.gold,
-                          minHeight: 10,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 40),
-
-                    // Question Text
-                    Text(
-                      qText,
-                      style: AppTextStyles.headline,
-                      textAlign: TextAlign.center,
-                    )
-                        .animate(key: ValueKey(room.currentQuestionIndex))
-                        .fadeIn()
-                        .scale(),
-
-                    const SizedBox(height: 40),
-
-                    // Shuffled Options
-                    ..._shuffledOptions.map((option) {
-                      final decodedOption =
-                          GameUtils.decodeHtmlEntities(option);
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 16),
-                        child: _AnswerButton(
-                          text: decodedOption,
-                          isSelected: _selectedAnswer == option,
-                          isCorrect: _hasAnswered &&
-                              option == question['correct_answer'],
-                          isWrong: _hasAnswered &&
-                              _selectedAnswer == option &&
-                              option != question['correct_answer'],
-                          onTap: () => _handleAnswerSelection(option),
-                        ),
-                      );
-                    }),
-
-                    if (_hasAnswered)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 20),
-                        child: Text(
-                          'Waiting for opponent...',
-                          style: AppTextStyles.label
-                              .copyWith(color: AppColors.gold),
-                        ).animate(onPlay: (c) => c.repeat()).fadeIn().fadeOut(),
-                      ),
-                  ],
+              // Timer bar
+              RepaintBoundary(
+                child: AnimatedBuilder(
+                  animation: _timerController,
+                  builder: (context, child) => LinearProgressIndicator(
+                    value: _timerController.value,
+                    backgroundColor: AppColors.surface,
+                    color: _timerController.value < 0.3
+                        ? AppColors.red
+                        : AppColors.gold,
+                    minHeight: 10,
+                  ),
                 ),
               ),
-            ),
-          );
-        },
+              const SizedBox(height: 40),
+
+              // Question Text
+              Text(
+                qText,
+                style: AppTextStyles.headline,
+                textAlign: TextAlign.center,
+              )
+                  .animate(key: ValueKey(room.currentQuestionIndex))
+                  .fadeIn()
+                  .scale(),
+
+              const SizedBox(height: 40),
+
+              // Shuffled Options
+              ..._shuffledOptions.map((option) {
+                final decodedOption =
+                    GameUtils.decodeHtmlEntities(option);
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: _AnswerButton(
+                    text: decodedOption,
+                    isSelected: _selectedAnswer == option,
+                    isCorrect: _hasAnswered &&
+                        option == question['correct_answer'],
+                    isWrong: _hasAnswered &&
+                        _selectedAnswer == option &&
+                        option != question['correct_answer'],
+                    onTap: () => _handleAnswerSelection(option),
+                  ),
+                );
+              }),
+
+              if (_hasAnswered)
+                Padding(
+                  padding: const EdgeInsets.only(top: 20),
+                  child: Text(
+                    'Waiting for opponent...',
+                    style: AppTextStyles.label
+                        .copyWith(color: AppColors.gold),
+                  ).animate(onPlay: (c) => c.repeat()).fadeIn().fadeOut(),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }

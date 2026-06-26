@@ -376,4 +376,44 @@ class GameRepository {
 
     await batch.commit();
   }
+
+  // --- DISCONNECT & FORFEIT LOGIC ---
+
+  /// Updates the user's presence status in the game room.
+  Future<void> updatePresence(String roomId, String userId, bool isOnline) async {
+    await _db.collection('gameRooms').doc(roomId).update({
+      'presence.$userId': {
+        'isOnline': isOnline,
+        'lastSeen': FieldValue.serverTimestamp(),
+      },
+    });
+  }
+
+  /// Declares a winner by forfeit if the opponent fails to reconnect.
+  Future<void> handleForfeit(String roomId, String winnerId) async {
+    final roomRef = _db.collection('gameRooms').doc(roomId);
+    
+    await _db.runTransaction((transaction) async {
+      final snapshot = await transaction.get(roomRef);
+      if (!snapshot.exists) return;
+      
+      final data = snapshot.data() as Map<String, dynamic>;
+      if (data['status'] == 'finished') return; // Match already finished
+
+      transaction.update(roomRef, {
+        'status': 'finished',
+        'winnerId': winnerId,
+        'forfeitWinnerId': winnerId,
+      });
+    });
+  }
+
+  /// Immediately forfeits the match for the user.
+  Future<void> leaveMatch(String roomId, String userId, String opponentId) async {
+    await _db.collection('gameRooms').doc(roomId).update({
+      'status': 'finished',
+      'winnerId': opponentId,
+      'forfeitWinnerId': opponentId,
+    });
+  }
 }
