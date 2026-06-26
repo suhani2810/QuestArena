@@ -123,9 +123,14 @@ class GameRepository {
       // 1. Update current player's answers and score
       final updatedAnswers = playerNumber == 1 ? currentP1Answers : currentP2Answers;
       
-      // Safety: Don't add more answers than there are questions or if already answered this index
+      // Safety: Don't answer if already answered this index or beyond
       if (updatedAnswers.length > currentIdx) return; 
 
+      // Padding for missed questions due to disconnect
+      while (updatedAnswers.length < currentIdx) {
+        updatedAnswers.add("TIMEOUT");
+      }
+      
       updatedAnswers.add(answer);
       final oldScore = (playerNumber == 1 ? player1['score'] : player2['score']) ?? 0;
       final newScore = oldScore + scoreIncrement;
@@ -139,7 +144,21 @@ class GameRepository {
       final p1Len = playerNumber == 1 ? updatedAnswers.length : currentP1Answers.length;
       final p2Len = playerNumber == 2 ? updatedAnswers.length : currentP2Answers.length;
 
+      final opponentId = playerNumber == 1 ? (player2?['uid']) : player1['uid'];
+      final opponentPresence = data['presence']?[opponentId];
+      final isOpponentOnline = opponentPresence?['isOnline'] ?? true;
+
+      // Advance if BOTH answered OR if current player answered and opponent is offline
+      bool shouldAdvance = false;
       if (p1Len > currentIdx && p2Len > currentIdx) {
+        shouldAdvance = true;
+      } else if (playerNumber == 1 && p1Len > currentIdx && !isOpponentOnline) {
+        shouldAdvance = true;
+      } else if (playerNumber == 2 && p2Len > currentIdx && !isOpponentOnline) {
+        shouldAdvance = true;
+      }
+
+      if (shouldAdvance) {
         if (currentIdx + 1 < questions.length) {
           transaction.update(roomRef, {'currentQuestionIndex': currentIdx + 1});
         } else {
@@ -233,38 +252,51 @@ class GameRepository {
       final player1 = data['player1'];
       final player2 = data['player2'];
 
-      // Check if both have submitted or if one answered correctly (instant win)
-      if (submissions.length == 2) {
+      final opponentId = userId == player1['uid'] ? player2['uid'] : player1['uid'];
+      final opponentPresence = data['presence']?[opponentId];
+      final isOpponentOnline = opponentPresence?['isOnline'] ?? true;
+
+      // Check if both have submitted OR if one answered correctly (instant win) OR if opponent is offline
+      if (submissions.length == 2 || isOpponentOnline == false || isCorrect == true) {
         final s1 = submissions[player1['uid']];
         final s2 = submissions[player2['uid']];
 
         String? winnerId;
 
-        if (s1['isCorrect'] && !s2['isCorrect']) {
-          winnerId = player1['uid'];
-        } else if (!s1['isCorrect'] && s2['isCorrect']) {
-          winnerId = player2['uid'];
-        } else if (s1['isCorrect'] && s2['isCorrect']) {
-          // Both correct -> Compare response times
-          if (s1['timestamp'] < s2['timestamp']) {
+        // Instant win if current player is correct and opponent is offline or hasn't answered yet
+        if (isCorrect && (submissions.length == 1)) {
+           winnerId = userId;
+        } else if (s1 != null && s2 != null) {
+          if (s1['isCorrect'] && !s2['isCorrect']) {
             winnerId = player1['uid'];
-          } else if (s2['timestamp'] < s1['timestamp']) {
+          } else if (!s1['isCorrect'] && s2['isCorrect']) {
             winnerId = player2['uid'];
+          } else if (s1['isCorrect'] && s2['isCorrect']) {
+            // Both correct -> Compare response times
+            if (s1['timestamp'] < s2['timestamp']) {
+              winnerId = player1['uid'];
+            } else if (s2['timestamp'] < s1['timestamp']) {
+              winnerId = player2['uid'];
+            } else {
+              // CASE 4: PERFECT TIE (Identical times)
+              transaction.update(roomRef, {
+                'arenaBreakerStatusMessage': 'Perfect Tie! Launching another Arena Breaker round...',
+              });
+              _scheduleNextABRound(roomId);
+              return;
+            }
           } else {
-            // CASE 4: PERFECT TIE (Identical times)
+            // CASE 2: BOTH INCORRECT
             transaction.update(roomRef, {
-              'arenaBreakerStatusMessage': 'Perfect Tie! Launching another Arena Breaker round...',
+              'arenaBreakerStatusMessage': 'Both players answered incorrectly. Next question loading...',
             });
             _scheduleNextABRound(roomId);
             return;
           }
-        } else {
-          // CASE 2: BOTH INCORRECT
-          transaction.update(roomRef, {
-            'arenaBreakerStatusMessage': 'Both players answered incorrectly. Next question loading...',
-          });
-          _scheduleNextABRound(roomId);
-          return;
+        } else if (submissions.length == 1 && !isCorrect && !isOpponentOnline) {
+            // Current player wrong and opponent offline -> New round
+            _scheduleNextABRound(roomId);
+            return;
         }
 
         if (winnerId != null) {
@@ -375,5 +407,63 @@ class GameRepository {
     });
 
     await batch.commit();
+  }
+
+  // --- DISCONNECT & FORFEIT LOGIC ---
+
+  /// Updates the user's presence status in the game room.
+  Future<void> updatePresence(String roomId, String userId, bool isOnline) async {
+    await _db.collection('gameRooms').doc(roomId).update({
+      'presence.$userId': {
+        'isOnline': isOnline,
+        'lastSeen': FieldValue.serverTimestamp(),
+      },
+    });
+  }
+
+  /// Declares a winner by forfeit if the opponent fails to reconnect.
+  Future<void> handleForfeit(String roomId, String winnerId) async {
+    final roomRef = _db.collection('gameRooms').doc(roomId);
+    
+    await _db.runTransaction((transaction) async {
+      final snapshot = await transaction.get(roomRef);
+      if (!snapshot.exists) return;
+      
+      final data = snapshot.data() as Map<String, dynamic>;
+      if (data['status'] == 'finished') return; // Match already finished
+
+      transaction.update(roomRef, {
+        'status': 'finished',
+        'winnerId': winnerId,
+        'forfeitWinnerId': winnerId,
+      });
+    });
+  }
+
+  /// Immediately forfeits the match for the user.
+  Future<void> leaveMatch(String roomId, String userId, String opponentId) async {
+    await _db.collection('gameRooms').doc(roomId).update({
+      'status': 'finished',
+      'winnerId': opponentId,
+      'forfeitWinnerId': opponentId,
+    });
+  }
+
+  /// Finds an active match for the given user that started recently (within 10 mins).
+  Future<GameRoomModel?> findActiveMatch(String uid) async {
+    final tenMinutesAgo = DateTime.now().subtract(const Duration(minutes: 10));
+    
+    final query = await _db.collection('gameRooms')
+        .where('status', whereIn: ['active', 'arena_breaker'])
+        .where('createdAt', isGreaterThan: Timestamp.fromDate(tenMinutesAgo))
+        .get();
+
+    for (var doc in query.docs) {
+      final data = doc.data();
+      if (data['player1']['uid'] == uid || data['player2']?['uid'] == uid) {
+        return GameRoomModel.fromJson(data);
+      }
+    }
+    return null;
   }
 }

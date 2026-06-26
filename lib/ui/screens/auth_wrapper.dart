@@ -31,7 +31,7 @@ class AuthWrapper extends ConsumerWidget {
           // If there's an error (like profile not found or network error),
           // we go to CreateProfile so the user isn't stuck.
           error: (e, s) {
-            print('Profile Fetch Error: $e');
+            debugPrint('Profile Fetch Error: $e');
             return const CreateProfileScreen();
           },
           data: (profile) {
