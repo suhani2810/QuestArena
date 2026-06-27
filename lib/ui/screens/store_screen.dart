@@ -75,7 +75,7 @@ class StoreScreen extends ConsumerWidget {
                 decoration: BoxDecoration(
                   color: AppColors.cardBg,
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppColors.gold.withOpacity(0.5)),
+                  border: Border.all(color: AppColors.gold.withValues(alpha: 0.5)),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,

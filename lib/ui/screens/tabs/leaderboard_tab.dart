@@ -39,7 +39,7 @@ class LeaderboardTab extends ConsumerWidget {
                 margin: const EdgeInsets.only(bottom: 12),
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: isMe ? AppColors.purple.withOpacity(0.2) : AppColors.cardBg,
+                  color: isMe ? AppColors.purple.withValues(alpha: 0.2) : AppColors.cardBg,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
                     color: isMe ? AppColors.purple : AppColors.surface,

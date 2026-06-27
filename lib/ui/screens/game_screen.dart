@@ -283,9 +283,9 @@ class _AnswerButton extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           color: isCorrect 
-              ? AppColors.teal.withOpacity(0.1) 
+              ? AppColors.teal.withValues(alpha: 0.1) 
               : isWrong 
-                  ? AppColors.red.withOpacity(0.1) 
+                  ? AppColors.red.withValues(alpha: 0.1)
                   : AppColors.cardBg,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(

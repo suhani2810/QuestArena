@@ -1,32 +1,35 @@
-// WHAT THIS FILE DOES:
-// Represents a single completed match record for the player's history.
-
 import 'package:flutter/foundation.dart';
 
-class MatchHistoryModel {
-  final String matchId;
-  final String opponentName;
-  final bool isWin;
-  final int myScore;
-  final int opponentScore;
-  final int xpGained;
-  final DateTime playedAt;
+enum MatchResult { win, loss, draw }
 
-  MatchHistoryModel({
-    required this.matchId,
+class MatchModel {
+  final String id;
+  final String opponentName;
+  final int playerScore;
+  final int opponentScore;
+  final int xpEarned;
+  final DateTime timestamp;
+
+  MatchModel({
+    required this.id,
     required this.opponentName,
-    required this.isWin,
-    required this.myScore,
+    required this.playerScore,
     required this.opponentScore,
-    required this.xpGained,
-    required this.playedAt,
+    required this.xpEarned,
+    required this.timestamp,
   });
 
-  factory MatchHistoryModel.fromJson(Map<String, dynamic> json) {
+  MatchResult get result {
+    if (playerScore > opponentScore) return MatchResult.win;
+    if (playerScore < opponentScore) return MatchResult.loss;
+    return MatchResult.draw;
+  }
+
+  factory MatchModel.fromJson(Map<String, dynamic> json) {
     DateTime parsedDate = DateTime.now();
     try {
-      if (json['playedAt'] != null) {
-        final val = json['playedAt'];
+      if (json['playedAt'] != null || json['timestamp'] != null) {
+        final val = json['playedAt'] ?? json['timestamp'];
         if (val is DateTime) {
           parsedDate = val;
         } else if (val is String) {
@@ -39,24 +42,27 @@ class MatchHistoryModel {
       debugPrint('Error parsing date: $e');
     }
 
-    return MatchHistoryModel(
-      matchId: json['matchId'] ?? '',
+    return MatchModel(
+      id: json['matchId'] ?? json['id'] ?? '',
       opponentName: json['opponentName'] ?? 'Unknown',
-      isWin: json['isWin'] ?? false,
-      myScore: json['myScore'] ?? 0,
+      playerScore: json['myScore'] ?? json['playerScore'] ?? 0,
       opponentScore: json['opponentScore'] ?? 0,
-      xpGained: json['xpGained'] ?? 0,
-      playedAt: parsedDate,
+      xpEarned: json['xpGained'] ?? json['xpEarned'] ?? 0,
+      timestamp: parsedDate,
     );
   }
 
   Map<String, dynamic> toJson() => {
-    'matchId': matchId,
+    'id': id,
     'opponentName': opponentName,
-    'isWin': isWin,
-    'myScore': myScore,
+    'playerScore': playerScore,
     'opponentScore': opponentScore,
-    'xpGained': xpGained,
-    'playedAt': playedAt,
+    'xpEarned': xpEarned,
+    'timestamp': timestamp,
+    // Keep legacy fields for Firestore compatibility if needed
+    'matchId': id,
+    'myScore': playerScore,
+    'xpGained': xpEarned,
+    'playedAt': timestamp,
   };
 }

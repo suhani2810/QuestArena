@@ -100,7 +100,7 @@ class ProfileTab extends ConsumerWidget {
                     return Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: isUnlocked ? AppColors.cardBg : AppColors.cardBg.withOpacity(0.3),
+                        color: isUnlocked ? AppColors.cardBg : AppColors.cardBg.withValues(alpha: 0.3),
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(color: isUnlocked ? AppColors.gold : AppColors.surface),
                       ),

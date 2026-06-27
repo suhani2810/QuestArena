@@ -10,6 +10,7 @@ import '../../../data/models/matchmaking_model.dart';
 import '../../../providers/matchmaking_providers.dart';
 import '../matchmaking_screen.dart';
 import '../private_room_screen.dart';
+import '../practice_screen.dart';
 
 class BattleTab extends ConsumerStatefulWidget {
   const BattleTab({super.key});
@@ -83,7 +84,9 @@ class _BattleTabState extends ConsumerState<BattleTab> {
                 subtitle: 'Sharpen your skills (No XP)',
                 icon: Icons.psychology_rounded,
                 color: AppColors.teal,
-                onTap: () {},
+                onTap: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const PracticeScreen()));
+                },
               ),
             ],
           ),
@@ -123,7 +126,7 @@ class _BattleModeCard extends StatelessWidget {
           children: [
             Container(
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
+              decoration: BoxDecoration(color: color.withValues(alpha: 0.1), shape: BoxShape.circle),
               child: Icon(icon, color: color, size: 32),
             ),
             const SizedBox(width: 20),

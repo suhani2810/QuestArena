@@ -13,6 +13,27 @@ class GameRepository {
 
   GameRepository(this._dio);
 
+  Future<List<Map<String, dynamic>>> fetchQuestions(int amount) async {
+    try {
+      final response = await _dio.get("${ApiConstants.triviaBaseUrl}?amount=$amount&type=multiple");
+      if (response.statusCode == 200 && response.data['results'] != null) {
+        return (response.data['results'] as List).map((q) => {
+          'question': GameUtils.decodeHtmlEntities(q['question']),
+          'correct_answer': GameUtils.decodeHtmlEntities(q['correct_answer']),
+          'incorrect_answers': (q['incorrect_answers'] as List)
+              .map((a) => GameUtils.decodeHtmlEntities(a))
+              .toList(),
+        }).toList();
+      }
+      throw Exception("Invalid response from trivia API");
+    } catch (e) {
+      print("Trivia API Error: $e - Falling back to local questions");
+      final allFallbacks = GameUtils.getFallbackQuestions();
+      // Ensure we only return 10 or whatever the requested amount is
+      return allFallbacks.take(amount).toList();
+    }
+  }
+
   // Create a private room
   Future<String> createPrivateRoom(Map<String, dynamic> player1Data, String code) async {
     final roomId = _db.collection('gameRooms').doc().id;
