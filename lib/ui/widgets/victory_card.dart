@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../core/constants/colors.dart';
 import '../../core/constants/text_styles.dart';
@@ -14,8 +13,7 @@ class VictoryCard extends StatelessWidget {
   final int xpEarned;
   final int coinsEarned;
   final int winStreak;
-  final DateTime timestamp;
-  final double? accuracy;
+  final double accuracy;
   final bool isCompact;
 
   const VictoryCard({
@@ -29,8 +27,7 @@ class VictoryCard extends StatelessWidget {
     required this.xpEarned,
     required this.coinsEarned,
     this.winStreak = 1,
-    required this.timestamp,
-    this.accuracy,
+    this.accuracy = 80.0,
     this.isCompact = false,
   });
 
@@ -39,16 +36,11 @@ class VictoryCard extends StatelessWidget {
     if (isCompact) return _buildCompactCard();
 
     return Container(
-      width: 340,
-      padding: const EdgeInsets.all(24),
+      width: 320,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(32),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [AppColors.purple, AppColors.primaryBg, AppColors.cardBg],
-        ),
-        border: Border.all(color: AppColors.gold.withValues(alpha: 0.3), width: 2),
+        color: AppColors.cardBg,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.gold.withValues(alpha: 0.5), width: 2),
         boxShadow: [
           BoxShadow(
             color: AppColors.gold.withValues(alpha: 0.2),
@@ -60,143 +52,175 @@ class VictoryCard extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Logo & Title
+          const SizedBox(height: 20),
+          // Header: Logo + VICTORY
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.shield_rounded, color: AppColors.gold, size: 24),
+              const Icon(Icons.shield_rounded, color: AppColors.gold, size: 18),
               const SizedBox(width: 8),
               Text(
                 'QUESTARENA',
-                style: AppTextStyles.headline.copyWith(
+                style: AppTextStyles.label.copyWith(
                   color: AppColors.gold,
-                  fontSize: 16,
+                  fontSize: 12,
                   letterSpacing: 2,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
           Text(
             'VICTORY',
             style: AppTextStyles.display.copyWith(
-              fontSize: 40,
+              fontSize: 32,
               color: Colors.white,
-              shadows: [
-                const Shadow(color: AppColors.gold, blurRadius: 10),
-              ],
+              letterSpacing: 4,
             ),
           ),
+          
           const SizedBox(height: 24),
 
-          // Player Info
-          Row(
+          // Avatar section with Ribbon
+          Stack(
+            alignment: Alignment.center,
+            clipBehavior: Clip.none,
             children: [
-              CircleAvatar(
-                radius: 35,
-                backgroundColor: AppColors.gold.withValues(alpha: 0.2),
+              // Avatar Glow
+              Container(
+                width: 100,
+                height: 100,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.gold.withValues(alpha: 0.4),
+                      blurRadius: 30,
+                      spreadRadius: 5,
+                    ),
+                  ],
+                ),
+              ),
+              // Avatar
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [AppColors.gold, AppColors.purple],
+                  ),
+                ),
                 child: CircleAvatar(
-                  radius: 32,
+                  radius: 45,
                   backgroundColor: AppColors.surface,
                   child: ClipOval(
                     child: avatarUrl != null && avatarUrl!.isNotEmpty
                         ? CachedNetworkImage(
                             imageUrl: avatarUrl!,
-                            width: 64,
-                            height: 64,
+                            width: 90,
+                            height: 90,
                             fit: BoxFit.cover,
                           )
-                        : const Icon(Icons.person, size: 40, color: AppColors.textSecondary),
+                        : const Icon(Icons.person, size: 50, color: AppColors.textSecondary),
                   ),
                 ),
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      username,
-                      style: AppTextStyles.headline.copyWith(fontSize: 20),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(
-                      rank,
-                      style: AppTextStyles.label.copyWith(color: AppColors.gold),
-                    ),
-                  ],
-                ),
+              // Crown
+              Positioned(
+                top: -15,
+                child: const Icon(Icons.workspace_premium_rounded, color: AppColors.gold, size: 30),
               ),
-              if (winStreak > 1)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              // Name Ribbon
+              Positioned(
+                bottom: -15,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 6),
                   decoration: BoxDecoration(
-                    color: AppColors.red.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.red.withValues(alpha: 0.5)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.whatshot_rounded, color: AppColors.red, size: 14),
-                      const SizedBox(width: 4),
-                      Text('$winStreak', style: AppTextStyles.label.copyWith(color: AppColors.red)),
+                    color: AppColors.purple,
+                    borderRadius: BorderRadius.circular(4),
+                    boxShadow: [
+                      BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 4, offset: const Offset(0, 2)),
                     ],
                   ),
+                  child: Text(
+                    username.toUpperCase(),
+                    style: AppTextStyles.headline.copyWith(fontSize: 14, color: Colors.white),
+                  ),
                 ),
+              ),
             ],
           ),
 
-          const SizedBox(height: 32),
-
-          // Match Details
+          const SizedBox(height: 30),
+          
+          // Rank Badge
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.05),
+              color: Colors.black.withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+              border: Border.all(color: AppColors.gold.withValues(alpha: 0.3)),
             ),
-            child: Column(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  'vs $opponentName',
-                  style: AppTextStyles.label.copyWith(color: AppColors.textSecondary),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '$playerScore - $opponentScore',
-                  style: AppTextStyles.display.copyWith(fontSize: 32),
-                ),
-                const Divider(color: Colors.white10, height: 24),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _StatItem(label: 'XP', value: '+$xpEarned', color: AppColors.purple),
-                    _StatItem(label: 'COINS', value: '+$coinsEarned', color: AppColors.gold),
-                    if (accuracy != null)
-                      _StatItem(label: 'ACCURACY', value: '${(accuracy! * 100).toInt()}%', color: AppColors.teal),
-                  ],
-                ),
+                const Icon(Icons.stars_rounded, color: AppColors.gold, size: 14),
+                const SizedBox(width: 4),
+                Text(rank.toUpperCase(), style: AppTextStyles.label.copyWith(color: AppColors.gold, fontSize: 10)),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
+          
+          Text('VS', style: AppTextStyles.label.copyWith(color: AppColors.textMuted, fontSize: 10)),
+          Text(opponentName, style: AppTextStyles.bodyMd.copyWith(color: AppColors.textSecondary)),
+          
+          const SizedBox(height: 12),
+          
+          // Score
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text('$playerScore', style: AppTextStyles.display.copyWith(color: AppColors.teal, fontSize: 36)),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Text('-', style: AppTextStyles.display.copyWith(color: AppColors.textMuted, fontSize: 36)),
+              ),
+              Text('$opponentScore', style: AppTextStyles.display.copyWith(color: AppColors.red, fontSize: 36)),
+            ],
+          ),
+
+          const SizedBox(height: 24),
+
+          // Reward Icons Row
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _StatIcon(icon: Icons.stars_rounded, label: '+$xpEarned', subLabel: 'XP', color: AppColors.purple),
+                _StatIcon(icon: Icons.monetization_on_rounded, label: '+$coinsEarned', subLabel: 'COINS', color: AppColors.gold),
+                _StatIcon(icon: Icons.whatshot_rounded, label: '$winStreak', subLabel: 'STREAK', color: AppColors.red),
+                _StatIcon(icon: Icons.track_changes_rounded, label: '${accuracy.toInt()}%', subLabel: 'ACCURACY', color: AppColors.teal),
               ],
             ),
           ),
 
           const SizedBox(height: 24),
-
-          // Footer
-          Text(
-            DateFormat('MMM d, yyyy • HH:mm').format(timestamp),
-            style: AppTextStyles.label.copyWith(color: AppColors.textMuted, fontSize: 10),
-          ),
-          const SizedBox(height: 16),
+          
+          // Footer message
           Text(
             'Think you can beat me?',
-            style: AppTextStyles.bodyMd.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+            style: AppTextStyles.bodyMd.copyWith(color: AppColors.gold, fontWeight: FontWeight.bold),
           ),
           Text(
-            'Challenge me on QuestArena.',
-            style: AppTextStyles.label.copyWith(color: AppColors.gold),
+            'Challenge me on QuestArena!',
+            style: AppTextStyles.label.copyWith(color: Colors.white70),
           ),
+          
+          const SizedBox(height: 24),
         ],
       ),
     );
@@ -245,19 +269,22 @@ class VictoryCard extends StatelessWidget {
   }
 }
 
-class _StatItem extends StatelessWidget {
+class _StatIcon extends StatelessWidget {
+  final IconData icon;
   final String label;
-  final String value;
+  final String subLabel;
   final Color color;
 
-  const _StatItem({required this.label, required this.value, required this.color});
+  const _StatIcon({required this.icon, required this.label, required this.subLabel, required this.color});
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Text(value, style: AppTextStyles.headline.copyWith(fontSize: 16, color: color)),
-        Text(label, style: AppTextStyles.label.copyWith(fontSize: 8, color: AppColors.textMuted)),
+        Icon(icon, color: color, size: 24),
+        const SizedBox(height: 4),
+        Text(label, style: AppTextStyles.headline.copyWith(fontSize: 12, color: Colors.white)),
+        Text(subLabel, style: AppTextStyles.label.copyWith(fontSize: 8, color: AppColors.textMuted)),
       ],
     );
   }

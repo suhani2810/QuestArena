@@ -1,18 +1,15 @@
 // WHAT THIS FILE DOES:
 // Displays the final scores, the winner, and rewards (XP/Coins).
-//
-// KEY CONCEPTS IN THIS FILE:
-// • Lottie: Using high-quality vector animations for "Victory" or "Defeat".
-// • Conditional Layouts: Different colors and text based on whether the user won or lost.
-// • Navigation: Returning the user back to the main Hub (HomeScreen).
+// Handles the 3-step victory experience: Victory Screen -> Victory Card Pop-up -> Share Options.
 
-
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:screenshot/screenshot.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../core/constants/colors.dart';
 import '../../core/constants/text_styles.dart';
 import '../../providers/user_providers.dart';
@@ -32,39 +29,15 @@ class ResultScreen extends ConsumerStatefulWidget {
 
 class _ResultScreenState extends ConsumerState<ResultScreen> {
   bool _rewardsClaimed = false;
-  final ScrollController _scrollController = ScrollController();
   final ScreenshotController _screenshotController = ScreenshotController();
-  bool _showVictoryCard = false;
-  bool _isSharing = false;
-  bool _hasPoppedOff = false;
 
   @override
   void initState() {
     super.initState();
     _handleRewards();
-    _scrollController.addListener(_onScroll);
-  }
-
-  @override
-  void dispose() {
-    _scrollController.removeListener(_onScroll);
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  void _onScroll() {
-    if (_scrollController.position.pixels > 100 && !_showVictoryCard) {
-      setState(() => _showVictoryCard = true);
-    }
-    
-    // Check for "pop-off" effect when reaching near the bottom
-    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 20 && !_hasPoppedOff) {
-      setState(() => _hasPoppedOff = true);
-    }
   }
 
   void _handleRewards() async {
-    // Avoid double processing if already handled in this session
     if (_rewardsClaimed) return;
 
     try {
@@ -78,7 +51,6 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
       final isWinner = widget.room.winnerId == currentUser.uid;
       final isDraw = widget.room.winnerId == 'draw';
 
-      // 1. Calculate History first so it's ready
       final myScore = currentUser.uid == widget.room.player1['uid'] 
           ? widget.room.player1['score'] 
           : (widget.room.player2?['score'] ?? 0);
@@ -100,7 +72,6 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
         timestamp: DateTime.now(),
       );
 
-      // 2. Perform all updates in parallel for speed
       await Future.wait([
         ref.read(userRepositoryProvider).updateUserStats(
           uid: currentUser.uid,
@@ -127,48 +98,19 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
     }
   }
 
-  void _onShareVictoryPressed() {
-    setState(() => _isSharing = true);
-    // Scroll to the top of the shared view to make sure they see the card and panel
-    _scrollController.animateTo(
-      _scrollController.position.maxScrollExtent,
-      duration: 600.ms,
-      curve: Curves.easeOutCubic
+  void _showVictoryCardPopUp(UserModel user, String opponentName, int myScore, int opponentScore) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierColor: Colors.black.withValues(alpha: 0.85),
+      builder: (context) => _VictoryCardModal(
+        user: user,
+        opponentName: opponentName,
+        myScore: myScore,
+        opponentScore: opponentScore,
+        screenshotController: _screenshotController,
+      ),
     );
-  }
-
-  Future<void> _captureAndShare(UserModel user) async {
-    try {
-      final directory = await getTemporaryDirectory();
-      final imagePath = await _screenshotController.captureAndSave(
-        directory.path,
-        fileName: "victory_card_${DateTime.now().millisecondsSinceEpoch}.png"
-      );
-
-      if (imagePath != null) {
-        await Share.shareXFiles(
-          [XFile(imagePath)],
-          text: 'Check out my victory on QuestArena! Challenge me!',
-        );
-      }
-    } catch (e) {
-      debugPrint('Share Error: $e');
-    }
-  }
-
-  Future<void> _saveToGallery() async {
-    try {
-      final image = await _screenshotController.capture();
-      if (image != null) {
-        // In a real app, you'd use a package like image_gallery_saver
-        // For now, we'll just show a success message as a mock
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Victory Card saved to gallery!')),
-        );
-      }
-    } catch (e) {
-      debugPrint('Save Error: $e');
-    }
   }
 
   @override
@@ -191,237 +133,211 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
         ? (widget.room.player2?['username'] ?? 'Opponent')
         : widget.room.player1['username'];
 
+    final opponentAvatar = currentUser.uid == widget.room.player1['uid']
+        ? (widget.room.player2?['avatarUrl'])
+        : widget.room.player1['avatarUrl'];
+
     return Scaffold(
       backgroundColor: AppColors.primaryBg,
       body: Stack(
         children: [
-          // Background Glow
+          // Background Glow and Confetti Placeholder
           Container(
             decoration: BoxDecoration(
               gradient: RadialGradient(
                 colors: [
                   isWinner 
-                      ? AppColors.teal.withValues(alpha: 0.2) 
-                      : (isDraw ? AppColors.gold.withValues(alpha: 0.2) : AppColors.red.withValues(alpha: 0.2)),
+                      ? AppColors.teal.withValues(alpha: 0.15) 
+                      : (isDraw ? AppColors.gold.withValues(alpha: 0.15) : AppColors.red.withValues(alpha: 0.15)),
                   AppColors.primaryBg,
                 ],
-                radius: 1.0,
+                radius: 1.2,
               ),
             ),
           ),
           
           SafeArea(
             child: SingleChildScrollView(
-              controller: _scrollController,
-              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
+              padding: const EdgeInsets.all(24),
               child: Column(
                 children: [
-                  // --- STEP 1: EXISTING VICTORY SCREEN CONTENT ---
-                  if (!_isSharing)
-                    Column(
+                  const SizedBox(height: 20),
+                  // Logo
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.shield_rounded, color: AppColors.gold, size: 20),
+                      const SizedBox(width: 8),
+                      Text('QUESTARENA', style: AppTextStyles.label.copyWith(color: AppColors.gold, letterSpacing: 2)),
+                    ],
+                  ).animate().fadeIn(),
+
+                  const SizedBox(height: 40),
+
+                  // Headline
+                  Text(
+                    isDraw ? "IT'S A DRAW!" : (isWinner ? 'YOU WON!' : 'YOU LOST!'),
+                    style: AppTextStyles.display.copyWith(
+                      fontSize: 48,
+                      color: isWinner ? AppColors.teal : (isDraw ? AppColors.gold : AppColors.red),
+                      shadows: [
+                        Shadow(
+                          color: (isWinner ? AppColors.teal : (isDraw ? AppColors.gold : AppColors.red)).withValues(alpha: 0.5),
+                          blurRadius: 20,
+                        ),
+                      ],
+                    ),
+                    textAlign: TextAlign.center,
+                  ).animate().scale(duration: 600.ms, curve: Curves.elasticOut),
+
+                  Text(
+                    isWinner ? "Awesome battle!" : "Keep practicing!",
+                    style: AppTextStyles.bodyMd.copyWith(color: AppColors.textSecondary),
+                  ).animate().fadeIn(delay: 400.ms),
+
+                  const SizedBox(height: 40),
+
+                  // Trophy Illustration (Placeholder)
+                  Container(
+                    height: 180,
+                    width: 180,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.gold.withValues(alpha: 0.2),
+                          blurRadius: 40,
+                          spreadRadius: 10,
+                        ),
+                      ],
+                    ),
+                    child: Icon(
+                      isWinner ? Icons.emoji_events_rounded : Icons.sentiment_very_dissatisfied_rounded,
+                      size: 140,
+                      color: isWinner ? AppColors.gold : AppColors.textMuted,
+                    ),
+                  ).animate().scale(delay: 200.ms, duration: 800.ms, curve: Curves.bounceOut),
+
+                  const SizedBox(height: 40),
+
+                  // Match Summary: Avatars and Scores
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        SizedBox(
-                          height: 140,
-                          child: isWinner 
-                            ? const Icon(Icons.emoji_events_rounded, size: 100, color: AppColors.gold)
-                            : (isDraw 
-                                ? const Icon(Icons.handshake_rounded, size: 100, color: AppColors.gold)
-                                : const Icon(Icons.sentiment_very_dissatisfied_rounded, size: 100, color: AppColors.red)),
-                        ).animate().scale(duration: 800.ms, curve: Curves.elasticOut),
-
-                        const SizedBox(height: 16),
-
-                        Text(
-                          isDraw ? "IT'S A DRAW!" : (isWinner ? 'VICTORY!' : 'DEFEAT'),
-                          style: AppTextStyles.display.copyWith(
-                            fontSize: 36,
-                            color: isWinner ? AppColors.teal : (isDraw ? AppColors.gold : AppColors.red),
-                          ),
-                          textAlign: TextAlign.center,
-                        ).animate().slideY(begin: 0.5, end: 0),
-
-                        const SizedBox(height: 24),
-
-                        Container(
-                          padding: const EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            color: AppColors.cardBg,
-                            borderRadius: BorderRadius.circular(24),
-                            border: Border.all(color: AppColors.surface),
-                          ),
-                          child: Column(
-                            children: [
-                              _ResultRow(label: 'YOUR SCORE', value: '$myScore', color: AppColors.gold),
-                              const Divider(color: AppColors.surface, height: 24),
-                              _ResultRow(label: 'OPPONENT', value: '$opponentScore', color: AppColors.textSecondary),
-                            ],
-                          ),
-                        ).animate().fadeIn(delay: 400.ms),
-
-                        const SizedBox(height: 24),
-
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
-                            _RewardItem(
-                              label: 'XP GAINED', 
-                              value: isWinner ? '+50' : (isDraw ? '+25' : '+15'), 
-                              icon: Icons.trending_up_rounded, 
-                              color: AppColors.purple,
-                              isProcessing: !_rewardsClaimed,
-                            ),
-                            _RewardItem(
-                              label: 'COINS', 
-                              value: isWinner ? '+20' : (isDraw ? '+10' : '+5'),
-                              icon: Icons.monetization_on_rounded, 
-                              color: AppColors.gold,
-                              isProcessing: !_rewardsClaimed,
-                            ),
-                          ],
-                        ).animate().fadeIn(delay: 600.ms),
-
-                        const SizedBox(height: 40),
-
-                        // Scroll Prompt (Step 1)
-                        if (isWinner)
-                          Column(
-                            children: [
-                              Text(
-                                '👇 Scroll down to reveal your Victory Card',
-                                style: AppTextStyles.label.copyWith(color: AppColors.textSecondary),
-                              ),
-                              const SizedBox(height: 8),
-                              const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.gold)
-                                .animate(onPlay: (controller) => controller.repeat())
-                                .moveY(begin: 0, end: 10, duration: 1000.ms, curve: Curves.easeInOut)
-                                .then()
-                                .moveY(begin: 10, end: 0, duration: 1000.ms, curve: Curves.easeInOut),
-                            ],
-                          ).animate().fadeIn(delay: 1000.ms),
+                        // Player
+                        _PlayerSummary(
+                          username: currentUser.username,
+                          avatarUrl: currentUser.avatarUrl,
+                          rank: currentUser.rank,
+                          isWinner: isWinner,
+                        ),
                         
-                        const SizedBox(height: 100), // Gap to allow scrolling
+                        // Score
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Row(
+                            children: [
+                              Text('$myScore', style: AppTextStyles.display.copyWith(color: AppColors.teal, fontSize: 28)),
+                              const SizedBox(width: 8),
+                              Text('-', style: AppTextStyles.display.copyWith(color: AppColors.textMuted, fontSize: 20)),
+                              const SizedBox(width: 8),
+                              Text('$opponentScore', style: AppTextStyles.display.copyWith(color: AppColors.red, fontSize: 28)),
+                            ],
+                          ),
+                        ),
+
+                        // Opponent
+                        _PlayerSummary(
+                          username: opponentName,
+                          avatarUrl: opponentAvatar,
+                          rank: 'Silver I', // Placeholder rank for opponent
+                          isWinner: !isWinner && !isDraw,
+                        ),
                       ],
                     ),
+                  ).animate().slideY(begin: 0.2, end: 0).fadeIn(delay: 600.ms),
 
-                  // --- STEP 2: SCROLL REVEAL VICTORY CARD ---
-                  if (isWinner)
-                    Column(
-                      children: [
-                        if (!_isSharing)
-                          Screenshot(
-                            controller: _screenshotController,
-                            child: VictoryCard(
-                              username: currentUser.username,
-                              avatarUrl: currentUser.avatarUrl,
-                              rank: currentUser.rank,
-                              opponentName: opponentName,
-                              playerScore: myScore,
-                              opponentScore: opponentScore,
-                              xpEarned: isWinner ? 50 : 15,
-                              coinsEarned: isWinner ? 20 : 5,
-                              timestamp: DateTime.now(),
-                            ),
-                          )
-                          .animate(target: _showVictoryCard ? 1 : 0)
-                          .fadeIn(duration: 600.ms)
-                          .slideY(begin: 0.3, end: 0, curve: Curves.easeOutCubic)
-                          .scale(
-                            begin: const Offset(0.95, 0.95), 
-                            end: const Offset(1.0, 1.0),
-                            duration: 600.ms
-                          )
-                          .then()
-                          .scale(
-                            begin: const Offset(1.0, 1.0),
-                            end: _hasPoppedOff ? const Offset(1.05, 1.05) : const Offset(1.0, 1.0),
-                            duration: 300.ms,
-                            curve: Curves.elasticOut
-                          ),
-                        
-                        if (_isSharing)
-                          Column(
-                            children: [
-                              const SizedBox(height: 40),
-                              VictoryCard(
-                                isCompact: true,
-                                username: currentUser.username,
-                                avatarUrl: currentUser.avatarUrl,
-                                rank: currentUser.rank,
-                                opponentName: opponentName,
-                                playerScore: myScore,
-                                opponentScore: opponentScore,
-                                xpEarned: isWinner ? 50 : 15,
-                                coinsEarned: isWinner ? 20 : 5,
-                                timestamp: DateTime.now(),
-                              ).animate().scale(duration: 400.ms, curve: Curves.easeOutBack),
-                              
-                              const SizedBox(height: 32),
-                              
-                              ShareOptionsPanel(
-                                onSharePressed: () => _captureAndShare(currentUser),
-                                onSavePressed: _saveToGallery,
-                              ).animate().slideY(begin: 0.5, end: 0).fadeIn(),
-                              
-                              const SizedBox(height: 32),
-                              
-                              TextButton(
-                                onPressed: () => setState(() => _isSharing = false),
-                                child: Text('CANCEL', style: AppTextStyles.label.copyWith(color: AppColors.textSecondary)),
-                              ),
-                            ],
-                          ),
+                  const SizedBox(height: 40),
 
-                        const SizedBox(height: 48),
-
-                        // Actions
-                        if (!_isSharing)
-                          Row(
-                            children: [
-                              Expanded(
-                                child: OutlinedButton(
-                                  onPressed: () => Navigator.of(context).popUntil((route) => route.isFirst),
-                                  style: OutlinedButton.styleFrom(
-                                    side: const BorderSide(color: AppColors.surface),
-                                    minimumSize: const Size(0, 56),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                  ),
-                                  child: const Text('CONTINUE', style: TextStyle(color: Colors.white)),
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: ElevatedButton(
-                                  onPressed: _onShareVictoryPressed,
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppColors.gold,
-                                    foregroundColor: Colors.black,
-                                    minimumSize: const Size(0, 56),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                  ),
-                                  child: const Text('SHARE VICTORY', style: TextStyle(fontWeight: FontWeight.w900)),
-                                ),
-                              ),
-                            ],
-                          ).animate(target: _showVictoryCard ? 1 : 0).fadeIn(delay: 400.ms),
-                      ],
-                    ),
-
-                  const SizedBox(height: 100),
-
-                  // Original Continue Button for Non-winners
-                  if (!isWinner)
-                    ElevatedButton(
-                      onPressed: !_rewardsClaimed ? null : () => Navigator.of(context).popUntil((route) => route.isFirst),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.purple,
-                        minimumSize: const Size(double.infinity, 56),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  // Rewards Row
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _RewardCard(
+                          label: 'XP EARNED',
+                          value: isWinner ? '+50 XP' : (isDraw ? '+25 XP' : '+15 XP'),
+                          icon: Icons.stars_rounded,
+                          color: AppColors.purple,
+                        ),
                       ),
-                      child: _rewardsClaimed 
-                          ? const Text('BACK TO HOME', style: TextStyle(fontWeight: FontWeight.bold))
-                          : const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: _RewardCard(
+                          label: 'COINS EARNED',
+                          value: isWinner ? '+20' : (isDraw ? '+10' : '+5'),
+                          icon: Icons.monetization_on_rounded,
+                          color: AppColors.gold,
+                        ),
+                      ),
+                    ],
+                  ).animate().fadeIn(delay: 800.ms),
+
+                  const SizedBox(height: 16),
+
+                  // Win Streak
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(
+                      color: AppColors.cardBg,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppColors.surface),
                     ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.whatshot_rounded, color: AppColors.red, size: 20),
+                        const SizedBox(width: 8),
+                        Text('WIN STREAK', style: AppTextStyles.label.copyWith(color: AppColors.textSecondary, letterSpacing: 1.5)),
+                        const SizedBox(width: 8),
+                        Text('4', style: AppTextStyles.headline.copyWith(color: AppColors.red, fontSize: 18)),
+                      ],
+                    ),
+                  ).animate().fadeIn(delay: 1000.ms),
+
+                  const SizedBox(height: 40),
+
+                  // Buttons
+                  ElevatedButton(
+                    onPressed: () => _showVictoryCardPopUp(currentUser, opponentName, myScore, opponentScore),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.purple,
+                      minimumSize: const Size(double.infinity, 64),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.share_rounded, color: Colors.white),
+                        SizedBox(width: 12),
+                        Text('SHARE YOUR VICTORY', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
+                      ],
+                    ),
+                  ).animate().fadeIn(delay: 1200.ms).scale(),
+
+                  const SizedBox(height: 16),
+
+                  TextButton(
+                    onPressed: () => Navigator.of(context).popUntil((route) => route.isFirst),
+                    child: Text(
+                      'Continue to dashboard',
+                      style: AppTextStyles.label.copyWith(color: AppColors.textSecondary, decoration: TextDecoration.underline),
+                    ),
+                  ).animate().fadeIn(delay: 1400.ms),
+                  
+                  const SizedBox(height: 40),
                 ],
               ),
             ),
@@ -432,15 +348,232 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
   }
 }
 
-class ShareOptionsPanel extends StatelessWidget {
-  final VoidCallback onSharePressed;
-  final VoidCallback onSavePressed;
-  
-  const ShareOptionsPanel({
-    super.key,
-    required this.onSharePressed,
-    required this.onSavePressed,
+class _PlayerSummary extends StatelessWidget {
+  final String username;
+  final String? avatarUrl;
+  final String rank;
+  final bool isWinner;
+
+  const _PlayerSummary({required this.username, this.avatarUrl, required this.rank, required this.isWinner});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Stack(
+          alignment: Alignment.center,
+          clipBehavior: Clip.none,
+          children: [
+            CircleAvatar(
+              radius: 35,
+              backgroundColor: isWinner ? AppColors.gold.withValues(alpha: 0.3) : AppColors.surface,
+              child: ClipOval(
+                child: avatarUrl != null && avatarUrl!.isNotEmpty
+                    ? CachedNetworkImage(imageUrl: avatarUrl!, width: 64, height: 64, fit: BoxFit.cover)
+                    : const Icon(Icons.person, color: AppColors.textMuted),
+              ),
+            ),
+            if (isWinner)
+              const Positioned(
+                top: -10,
+                child: Icon(Icons.workspace_premium_rounded, color: AppColors.gold, size: 20),
+              ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Text(username, style: AppTextStyles.headline.copyWith(fontSize: 14)),
+        Text(rank, style: AppTextStyles.label.copyWith(color: AppColors.gold, fontSize: 10)),
+      ],
+    );
+  }
+}
+
+class _RewardCard extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color color;
+
+  const _RewardCard({required this.label, required this.value, required this.icon, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.surface),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 24),
+          const SizedBox(height: 8),
+          Text(label, style: AppTextStyles.label.copyWith(fontSize: 8, color: AppColors.textSecondary)),
+          Text(value, style: AppTextStyles.headline.copyWith(fontSize: 16, color: color)),
+        ],
+      ),
+    );
+  }
+}
+
+class _VictoryCardModal extends StatefulWidget {
+  final UserModel user;
+  final String opponentName;
+  final int myScore;
+  final int opponentScore;
+  final ScreenshotController screenshotController;
+
+  const _VictoryCardModal({
+    required this.user,
+    required this.opponentName,
+    required this.myScore,
+    required this.opponentScore,
+    required this.screenshotController,
   });
+
+  @override
+  State<_VictoryCardModal> createState() => _VictoryCardModalState();
+}
+
+class _VictoryCardModalState extends State<_VictoryCardModal> {
+  bool _isSharingOptionsVisible = false;
+
+  void _onSharePressed() {
+    setState(() => _isSharingOptionsVisible = true);
+  }
+
+  Future<void> _captureAndShare() async {
+    try {
+      final image = await widget.screenshotController.captureFromWidget(
+        Material(
+          color: Colors.transparent,
+          child: VictoryCard(
+            username: widget.user.username,
+            avatarUrl: widget.user.avatarUrl,
+            rank: widget.user.rank,
+            opponentName: widget.opponentName,
+            playerScore: widget.myScore,
+            opponentScore: widget.opponentScore,
+            xpEarned: 50,
+            coinsEarned: 20,
+          ),
+        ),
+        delay: const Duration(milliseconds: 100),
+        context: context,
+      );
+
+      final directory = await getTemporaryDirectory();
+      final imagePath = await File('${directory.path}/victory_card.png').create();
+      await imagePath.writeAsBytes(image);
+
+      await Share.shareXFiles(
+        [XFile(imagePath.path)],
+        text: 'Check out my victory on QuestArena! Challenge me!',
+      );
+    } catch (e) {
+      debugPrint('Share Error: $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.topRight,
+              children: [
+                // The Card
+                Screenshot(
+                  controller: widget.screenshotController,
+                  child: VictoryCard(
+                    username: widget.user.username,
+                    avatarUrl: widget.user.avatarUrl,
+                    rank: widget.user.rank,
+                    opponentName: widget.opponentName,
+                    playerScore: widget.myScore,
+                    opponentScore: widget.opponentScore,
+                    xpEarned: 50,
+                    coinsEarned: 20,
+                  ),
+                ).animate().scale(duration: 600.ms, curve: Curves.easeOutBack).fadeIn(),
+                
+                // Close X button
+                Positioned(
+                  top: 10,
+                  right: 10,
+                  child: IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white, size: 24),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 24),
+
+            // Action Buttons
+            if (!_isSharingOptionsVisible)
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.surface,
+                        minimumSize: const Size(0, 56),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text('CLOSE', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: _onSharePressed,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.gold,
+                        foregroundColor: Colors.black,
+                        minimumSize: const Size(0, 56),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.share_rounded, size: 20),
+                          const SizedBox(width: 8),
+                          const Text('SHARE', style: TextStyle(fontWeight: FontWeight.w900)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ).animate().fadeIn(delay: 400.ms).slideY(begin: 0.5, end: 0),
+
+            // Share Options Dialog (Custom built to match design)
+            if (_isSharingOptionsVisible)
+              _ShareOptionsPanel(
+                onClose: () => setState(() => _isSharingOptionsVisible = false),
+                onShareToPlatform: _captureAndShare,
+              ).animate().slideY(begin: 1.0, end: 0, duration: 400.ms, curve: Curves.easeOutCubic).fadeIn(),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ShareOptionsPanel extends StatelessWidget {
+  final VoidCallback onClose;
+  final VoidCallback onShareToPlatform;
+
+  const _ShareOptionsPanel({required this.onClose, required this.onShareToPlatform});
 
   @override
   Widget build(BuildContext context) {
@@ -452,28 +585,53 @@ class ShareOptionsPanel extends StatelessWidget {
         border: Border.all(color: AppColors.surface),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'SHARE TO SOCIALS',
-            style: AppTextStyles.label.copyWith(color: AppColors.textSecondary, letterSpacing: 2),
-          ),
-          const SizedBox(height: 24),
-          GridView.count(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisCount: 4,
-            mainAxisSpacing: 20,
-            crossAxisSpacing: 20,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _ShareItem(icon: Icons.whatshot, label: 'WhatsApp', color: Colors.green, onTap: onSharePressed),
-              _ShareItem(icon: Icons.camera_alt, label: 'Instagram', color: Colors.pink, onTap: onSharePressed),
-              _ShareItem(icon: Icons.send, label: 'Telegram', color: Colors.blue, onTap: onSharePressed),
-              _ShareItem(icon: Icons.alternate_email, label: 'X / Twitter', color: Colors.white, onTap: onSharePressed),
-              _ShareItem(icon: Icons.link, label: 'Copy Link', color: Colors.grey, onTap: () {}),
-              _ShareItem(icon: Icons.save_alt, label: 'Save Image', color: AppColors.gold, onTap: onSavePressed),
-              _ShareItem(icon: Icons.more_horiz, label: 'More', color: AppColors.purple, onTap: onSharePressed),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Share your victory', style: AppTextStyles.headline.copyWith(fontSize: 18)),
+                  Text('Let your friends know!', style: AppTextStyles.label.copyWith(color: AppColors.textSecondary)),
+                ],
+              ),
+              IconButton(
+                icon: const Icon(Icons.close, color: AppColors.textMuted),
+                onPressed: onClose,
+              ),
             ],
+          ),
+          const SizedBox(height: 32),
+          // Platforms Row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _SharePlatformItem(icon: Icons.whatshot, label: 'WhatsApp', color: Colors.green, onTap: onShareToPlatform),
+              _SharePlatformItem(icon: Icons.camera_alt, label: 'Instagram', color: Colors.pink, onTap: onShareToPlatform),
+              _SharePlatformItem(icon: Icons.send, label: 'Telegram', color: Colors.blue, onTap: onShareToPlatform),
+              _SharePlatformItem(icon: Icons.alternate_email, label: 'X / Twitter', color: Colors.white, onTap: onShareToPlatform),
+            ],
+          ),
+          const SizedBox(height: 32),
+          // Actions Row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _ShareActionItem(icon: Icons.link, label: 'Copy Link', onTap: () {}),
+              _ShareActionItem(icon: Icons.download_rounded, label: 'Save Image', onTap: onShareToPlatform),
+              _ShareActionItem(icon: Icons.more_horiz, label: 'More', onTap: onShareToPlatform),
+            ],
+          ),
+          const SizedBox(height: 40),
+          ElevatedButton(
+            onPressed: onClose,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.surface,
+              minimumSize: const Size(double.infinity, 56),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text('CANCEL', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -481,13 +639,13 @@ class ShareOptionsPanel extends StatelessWidget {
   }
 }
 
-class _ShareItem extends StatelessWidget {
+class _SharePlatformItem extends StatelessWidget {
   final IconData icon;
   final String label;
   final Color color;
   final VoidCallback onTap;
 
-  const _ShareItem({required this.icon, required this.label, required this.color, required this.onTap});
+  const _SharePlatformItem({required this.icon, required this.label, required this.color, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -502,65 +660,40 @@ class _ShareItem extends StatelessWidget {
               shape: BoxShape.circle,
               border: Border.all(color: color.withValues(alpha: 0.3)),
             ),
-            child: Icon(icon, color: color, size: 20),
+            child: Icon(icon, color: color, size: 24),
           ),
         ),
         const SizedBox(height: 8),
-        Text(
-          label,
-          style: AppTextStyles.label.copyWith(fontSize: 8, color: AppColors.textMuted),
-          textAlign: TextAlign.center,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
+        Text(label, style: AppTextStyles.label.copyWith(fontSize: 8, color: AppColors.textMuted)),
       ],
     );
   }
 }
 
-class _ResultRow extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color color;
-  const _ResultRow({required this.label, required this.value, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label, style: AppTextStyles.label),
-        Text(value, style: AppTextStyles.display.copyWith(fontSize: 24, color: color)),
-      ],
-    );
-  }
-}
-
-class _RewardItem extends StatelessWidget {
-  final String label;
-  final String value;
+class _ShareActionItem extends StatelessWidget {
   final IconData icon;
-  final Color color;
-  final bool isProcessing;
-  
-  const _RewardItem({
-    required this.label, 
-    required this.value, 
-    required this.icon, 
-    required this.color,
-    this.isProcessing = false,
-  });
+  final String label;
+  final VoidCallback onTap;
+
+  const _ShareActionItem({required this.icon, required this.label, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Icon(icon, color: isProcessing ? Colors.grey : color, size: 28),
+        GestureDetector(
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: const BoxDecoration(
+              color: AppColors.surface,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: Colors.white, size: 24),
+          ),
+        ),
         const SizedBox(height: 8),
-        isProcessing 
-          ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
-          : Text(value, style: AppTextStyles.headline.copyWith(fontSize: 20)),
-        Text(label, style: AppTextStyles.label.copyWith(fontSize: 10)),
+        Text(label, style: AppTextStyles.label.copyWith(fontSize: 8, color: AppColors.textMuted)),
       ],
     );
   }
