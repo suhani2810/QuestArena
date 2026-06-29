@@ -14,6 +14,15 @@ import '../../../core/utils/rank_calculator.dart';
 import '../store_screen.dart';
 import '../matchmaking_screen.dart';
 import '../../widgets/category_picker_sheet.dart';
+import '../store_screen.dart';
+import '../../../core/utils/rank_calculator.dart';
+import '../../../core/utils/rank_system.dart';
+import 'package:intl/intl.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+
+import '../../widgets/rank_badge.dart';
+import '../../widgets/rank_progress_bar.dart';
+import '../../widgets/xp_progress_bar.dart';
 
 class DashboardTab extends ConsumerWidget {
   const DashboardTab({super.key});
@@ -80,8 +89,9 @@ class DashboardTab extends ConsumerWidget {
                     border: Border.all(
                       color: rankColor.withValues(alpha: 0.5),
                     ),
+                    border: Border.all(color: AppColors.surface),
                   ),
-                  child: Row(
+                  child: Column(
                     children: [
                       CircleAvatar(
                         radius: 35,
@@ -124,10 +134,45 @@ class DashboardTab extends ConsumerWidget {
                               borderRadius: BorderRadius.circular(10),
                               child: LinearProgressIndicator(
                                 value: user.xp / user.xpToNextLevel,
+                      Row(
+                        children: [
+                          Stack(
+                            alignment: Alignment.bottomRight,
+                            children: [
+                              CircleAvatar(
+                                radius: 35,
                                 backgroundColor: AppColors.surface,
-                                color: rankColor,
-                                minHeight: 8,
+                                child: ClipOval(
+                                  child: CachedNetworkImage(
+                                    imageUrl: user.avatarUrl ?? '',
+                                    width: 64,
+                                    height: 64,
+                                    fit: BoxFit.cover,
+                                    placeholder: (context, url) => const CircularProgressIndicator(strokeWidth: 2),
+                                    errorWidget: (context, url, error) => const Icon(Icons.person),
+                                  ),
+                                ),
                               ),
+                              RankBadge(rank: user.rank, subRank: user.subRank, size: 28),
+                            ],
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(user.username, style: AppTextStyles.headline),
+                                Text(
+                                  RankSystem.getRankName(user.rank, user.subRank),
+                                  style: AppTextStyles.label.copyWith(
+                                    color: RankSystem.getRankColor(user.rank),
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                // XP Bar
+                                XpProgressBar(totalXp: user.xp),
+                              ],
                             ),
                             const SizedBox(height: 6),
                             Text(
@@ -136,7 +181,15 @@ class DashboardTab extends ConsumerWidget {
                             ),
                           ],
                         ),
+                          ),
+                        ],
                       ),
+                      if (user.rank != 'Legend' && user.rank != 'Unranked') ...[
+                        const SizedBox(height: 16),
+                        const Divider(color: AppColors.surface),
+                        const SizedBox(height: 8),
+                        RankProgressBar(rank: user.rank, subRank: user.subRank, points: user.rankPoints),
+                      ],
                     ],
                   ),
                 ),
@@ -169,6 +222,9 @@ class DashboardTab extends ConsumerWidget {
                       value: '$winRate%',
                       color: AppColors.gold,
                     ),
+                    _StatCard(label: 'WINS', value: user.wins.toString(), color: AppColors.teal),
+                    const SizedBox(width: 16),
+                    _StatCard(label: 'LOSSES', value: user.losses.toString(), color: AppColors.red),
                   ],
                 ),
 
@@ -248,6 +304,11 @@ class DashboardTab extends ConsumerWidget {
                                 style: AppTextStyles.display.copyWith(
                                   color: Colors.white,
                                   fontSize: 24,
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: (item.isWin ? AppColors.teal : AppColors.red).withValues(alpha: 0.1),
+                                  shape: BoxShape.circle,
                                 ),
                               ),
                             ],

@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/constants/colors.dart';
 import '../../../core/constants/text_styles.dart';
+import '../../../core/utils/rank_system.dart';
 import '../../../providers/leaderboard_providers.dart';
 import '../../../providers/user_providers.dart';
 
@@ -84,7 +85,10 @@ class LeaderboardTab extends ConsumerWidget {
                               color: isMe ? AppColors.gold : AppColors.textPrimary,
                             ),
                           ),
-                          Text('LVL ${player.level} • ${player.rank}', style: AppTextStyles.label.copyWith(fontSize: 10)),
+                          Text(
+                            'LVL ${player.level} • ${RankSystem.getRankName(player.rank, player.subRank)}', 
+                            style: AppTextStyles.label.copyWith(fontSize: 10),
+                          ),
                         ],
                       ),
                     ),

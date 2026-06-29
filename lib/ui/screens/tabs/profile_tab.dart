@@ -11,6 +11,11 @@ import '../../../providers/auth_providers.dart';
 import '../../../core/errors/result.dart';
 import 'edit_profile_screen.dart';
 
+import '../../widgets/xp_progress_bar.dart';
+import '../../widgets/rank_badge.dart';
+import '../../widgets/rank_progress_bar.dart';
+import '../../../core/utils/rank_system.dart';
+
 class ProfileTab extends ConsumerWidget {
   const ProfileTab({super.key});
 
@@ -29,6 +34,10 @@ class ProfileTab extends ConsumerWidget {
         }
 
         final totalMatches = user.totalWins + user.totalLosses;
+
+        final winRate = user.matchesPlayed > 0 
+            ? (user.wins / user.matchesPlayed * 100).toStringAsFixed(1)
+            : '0';
 
         // List of all possible achievements to show "Locked" ones
         final allAchievements = [
@@ -56,6 +65,10 @@ class ProfileTab extends ConsumerWidget {
             'desc': 'Get 10/10 in one match',
             'icon': Icons.school
           },
+          {'id': 'first_win', 'name': 'First Blood', 'desc': 'Win your first match', 'icon': Icons.flash_on_rounded},
+          {'id': 'on_fire', 'name': 'On Fire', 'desc': 'Win 3 games in a row', 'icon': Icons.whatshot},
+          {'id': 'veteran', 'name': 'Veteran', 'desc': 'Win 10 matches', 'icon': Icons.military_tech},
+          {'id': 'scholar', 'name': 'Scholar', 'desc': 'Get 10/10 in one match', 'icon': Icons.school},
         ];
 
         return Scaffold(
@@ -91,8 +104,25 @@ class ProfileTab extends ConsumerWidget {
                           const CircularProgressIndicator(),
                       errorWidget: (context, url, error) =>
                           const Icon(Icons.person, size: 40),
+                Stack(
+                  alignment: Alignment.bottomRight,
+                  children: [
+                    CircleAvatar(
+                      radius: 50,
+                      backgroundColor: AppColors.surface,
+                      child: ClipOval(
+                        child: CachedNetworkImage(
+                          imageUrl: user.avatarUrl ?? '',
+                          width: 100,
+                          height: 100,
+                          fit: BoxFit.cover,
+                          placeholder: (context, url) => const CircularProgressIndicator(),
+                          errorWidget: (context, url, error) => const Icon(Icons.person, size: 40),
+                        ),
+                      ),
                     ),
-                  ),
+                    RankBadge(rank: user.rank, subRank: user.subRank, size: 36),
+                  ],
                 ),
                 const SizedBox(height: 16),
                 Text(
@@ -141,6 +171,34 @@ class ProfileTab extends ConsumerWidget {
                     border: Border.all(
                       color: AppColors.gold.withValues(alpha: 0.3),
                     ),
+                Text(user.username, style: AppTextStyles.headline),
+                Text(
+                  RankSystem.getRankName(user.rank, user.subRank),
+                  style: AppTextStyles.label.copyWith(
+                    color: RankSystem.getRankColor(user.rank),
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                
+                const SizedBox(height: 24),
+                
+                // XP Progress Bar
+                XpProgressBar(totalXp: user.xp),
+                
+                if (user.rank != 'Legend' && user.rank != 'Unranked') ...[
+                  const SizedBox(height: 16),
+                  RankProgressBar(rank: user.rank, subRank: user.subRank, points: user.rankPoints),
+                ],
+
+                const SizedBox(height: 32),
+                
+                // Stats Summary
+                Container(
+                  padding: const EdgeInsets.symmetric(vertical: 20),
+                  decoration: BoxDecoration(
+                    color: AppColors.cardBg,
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: AppColors.surface),
                   ),
                   child: Column(
                     children: [
@@ -205,6 +263,29 @@ class ProfileTab extends ConsumerWidget {
                       Text(
                         '${user.xp}/${user.xpToNextLevel} XP',
                         style: AppTextStyles.label,
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          _ProfileStat(label: 'PLAYED', value: '${user.matchesPlayed}'),
+                          _ProfileStat(label: 'WINS', value: '${user.wins}'),
+                          _ProfileStat(label: 'COINS', value: '${user.coins}'),
+                        ],
+                      ),
+                      const Divider(color: AppColors.surface, height: 32, indent: 24, endIndent: 24),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          _ProfileStat(label: 'LOSSES', value: '${user.losses}'),
+                          _ProfileStat(label: 'DRAWS', value: '${user.draws}'),
+                          _ProfileStat(label: 'WIN RATE', value: '$winRate%'),
+                        ],
+                      ),
+                      const Divider(color: AppColors.surface, height: 32, indent: 24, endIndent: 24),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          _ProfileStat(label: 'CURRENT STREAK', value: '${user.currentWinStreak}'),
+                          _ProfileStat(label: 'HIGHEST STREAK', value: '${user.highestWinStreak}'),
+                        ],
                       ),
                     ],
                   ),
@@ -236,6 +317,7 @@ class ProfileTab extends ConsumerWidget {
                         color: isUnlocked
                             ? AppColors.cardBg
                             : AppColors.cardBg.withValues(alpha: 0.3),
+                        color: isUnlocked ? AppColors.cardBg : AppColors.cardBg.withValues(alpha: 0.3),
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
                             color: isUnlocked
@@ -321,7 +403,7 @@ class ProfileTab extends ConsumerWidget {
               if (context.mounted && result is Failure) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text((result as Failure).error.message),
+                    content: Text(result.error.message),
                     backgroundColor: AppColors.red,
                   ),
                 );
