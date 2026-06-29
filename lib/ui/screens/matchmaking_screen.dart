@@ -2,6 +2,7 @@
 // Highly polished Animated UI for matchmaking.
 // Uses a radar-inspired design to maintain a high-tech "Gaming" feel.
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -12,17 +13,46 @@ import '../../providers/matchmaking_providers.dart';
 import '../../providers/user_providers.dart';
 import 'lobby_screen.dart';
 
-class MatchmakingScreen extends ConsumerWidget {
+class MatchmakingScreen extends ConsumerStatefulWidget {
   const MatchmakingScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MatchmakingScreen> createState() => _MatchmakingScreenState();
+}
+
+class _MatchmakingScreenState extends ConsumerState<MatchmakingScreen> {
+  Timer? _pingTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _startPingTimer();
+  }
+
+  @override
+  void dispose() {
+    _pingTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startPingTimer() {
+    _pingTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      final user = ref.read(currentUserProvider).value;
+      if (user != null) {
+        ref.read(matchmakingRepositoryProvider).pingMatchmaking(user.uid);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final user = ref.watch(currentUserProvider).value;
 
     // Navigation logic: Listen for the ticket to become 'matched'
     ref.listen(matchmakingTicketProvider, (previous, next) {
       final ticket = next.value;
       if (ticket != null && ticket.status == 'matched' && ticket.gameRoomId != null) {
+        _pingTimer?.cancel();
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => LobbyScreen(roomId: ticket.gameRoomId!)),
         );

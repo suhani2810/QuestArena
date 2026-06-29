@@ -1,12 +1,11 @@
 // WHAT THIS FILE DOES:
-// Manages the player's presence in the matchmaking queue.
+// Manages the player's presence in the matchmaking queue with robust transaction logic.
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dio/dio.dart';
 import '../../core/constants/api_constants.dart';
 import '../../core/utils/game_utils.dart';
 import '../models/matchmaking_model.dart';
-import '../services/firestore_service.dart';
 
 class MatchmakingRepository {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -16,85 +15,120 @@ class MatchmakingRepository {
 
   // Start searching for a match
   Future<void> startSearching(MatchmakingModel ticket) async {
-    // 0. Check if a ticket already exists to prevent duplicate entries
-    final existingDoc = await _db.collection('matchmaking').doc(ticket.uid).get();
-    if (existingDoc.exists && existingDoc.get('status') == 'searching') {
-      return; // Already searching
-    }
+    // 0. Initial Cleanup: Delete any old ticket for this user
+    await _db.collection('matchmaking').doc(ticket.uid).delete();
 
-    // 1. Save our ticket
-    await _db.collection('matchmaking').doc(ticket.uid).set(ticket.toJson());
+    // 1. Create our searching ticket
+    final myTicketRef = _db.collection('matchmaking').doc(ticket.uid);
+    await myTicketRef.set({
+      ...ticket.toJson(),
+      'status': 'searching',
+      'lastSeen': FieldValue.serverTimestamp(),
+    });
 
-    // 2. Look for another player who is also searching
+    // 2. Look for potential opponents
+    // We only want players who are 'searching' and have been seen in the last 30 seconds
+    final thirtySecondsAgo = DateTime.now().subtract(const Duration(seconds: 30));
+    
     final potentialMatches = await _db.collection('matchmaking')
         .where('status', isEqualTo: 'searching')
+        .where('categoryId', isEqualTo: ticket.categoryId)
+        .where('searchStartedAt', isGreaterThan: thirtySecondsAgo.toIso8601String())
+        .limit(10)
         .get();
 
-    // Filter in Dart to avoid requiring a Firestore composite index for category matching.
-    QueryDocumentSnapshot<Map<String, dynamic>>? matchDoc;
     for (final doc in potentialMatches.docs) {
       if (doc.id == ticket.uid) continue;
 
-      final data = doc.data();
-      if (data['categoryId'] == ticket.categoryId) {
-        matchDoc = doc;
-        break;
+      // 3. Attempt to "Claim" this opponent via Transaction
+      final opponentUid = doc.id;
+      final opponentRef = _db.collection('matchmaking').doc(opponentUid);
+
+      final success = await _db.runTransaction((transaction) async {
+        final oppSnap = await transaction.get(opponentRef);
+        final mySnap = await transaction.get(myTicketRef);
+
+        if (!oppSnap.exists || !mySnap.exists) return false;
+        
+        final oppData = oppSnap.data()!;
+        final myData = mySnap.data()!;
+
+        // Check if both are still searching
+        if (oppData['status'] != 'searching' || myData['status'] != 'searching') {
+          return false;
+        }
+
+        // Lock both tickets to 'creating' status so no one else picks them up
+        transaction.update(opponentRef, {'status': 'matched_pending', 'matchedWith': ticket.uid});
+        transaction.update(myTicketRef, {'status': 'creating', 'matchedWith': opponentUid});
+        
+        return true;
+      });
+
+      if (success) {
+        // I am the "Host" - I will create the game room
+        await _createGameRoomAndFinalize(ticket.uid, opponentUid, ticket.categoryId, ticket.categoryName);
+        return;
       }
-    }
-
-    if (matchDoc != null) {
-      final opponentUid = matchDoc.id;
-
-      // 3. Create a game room
-      final roomId = _db.collection('gameRooms').doc().id;
       
-      final player1Data = ticket.toJson();
-      final player2Data = matchDoc.data();
-
-      // Fetch questions from client side since Cloud Functions are not available on Spark plan
-      List<Map<String, dynamic>> questions = [];
-      try {
-        final response = await _dio.get(
-          ApiConstants.triviaUrlForCategory(ticket.categoryId),
-        );
-        questions = (response.data['results'] as List).map((q) => {
-          'question': GameUtils.decodeHtmlEntities(q['question']),
-          'correct_answer': GameUtils.decodeHtmlEntities(q['correct_answer']),
-          'incorrect_answers': (q['incorrect_answers'] as List)
-              .map((a) => GameUtils.decodeHtmlEntities(a))
-              .toList(),
-        }).toList();
-      } catch (e) {
-        print("Trivia API Error: $e");
-        questions = GameUtils.getFallbackQuestions();
-      }
-
-      await _db.collection('gameRooms').doc(roomId).set({
-        'roomId': roomId,
-        'roomCode': '', // Not needed for public matchmaking
-        'categoryId': ticket.categoryId,
-        'categoryName': ticket.categoryName,
-        'status': 'waiting',
-        'player1': {...player1Data, 'isReady': false, 'score': 0, 'answers': []},
-        'player2': {...player2Data, 'isReady': false, 'score': 0, 'answers': []},
-        'createdAt': FieldValue.serverTimestamp(),
-        'questions': questions,
-      });
-
-      // 4. Update both tickets to 'matched'
-      final batch = _db.batch();
-      batch.update(_db.collection('matchmaking').doc(ticket.uid), {
-        'status': 'matched',
-        'matchedWith': opponentUid,
-        'gameRoomId': roomId,
-      });
-      batch.update(_db.collection('matchmaking').doc(opponentUid), {
-        'status': 'matched',
-        'matchedWith': ticket.uid,
-        'gameRoomId': roomId,
-      });
-      await batch.commit();
+      // If transaction failed, continue to next potential match
     }
+  }
+
+  Future<void> _createGameRoomAndFinalize(
+    String hostUid, 
+    String guestUid, 
+    int? categoryId,
+    String categoryName,
+  ) async {
+    final roomId = _db.collection('gameRooms').doc().id;
+
+    // 1. Fetch questions
+    List<Map<String, dynamic>> questions = [];
+    try {
+      final response = await _dio.get(ApiConstants.triviaUrlForCategory(categoryId));
+      questions = (response.data['results'] as List).map((q) => {
+        'question': GameUtils.decodeHtmlEntities(q['question']),
+        'correct_answer': GameUtils.decodeHtmlEntities(q['correct_answer']),
+        'incorrect_answers': (q['incorrect_answers'] as List)
+            .map((a) => GameUtils.decodeHtmlEntities(a))
+            .toList(),
+      }).toList();
+    } catch (e) {
+      print("Trivia API Error: $e");
+      questions = GameUtils.getFallbackQuestions();
+    }
+
+    // 2. Get both tickets to build room data
+    final hostSnap = await _db.collection('matchmaking').doc(hostUid).get();
+    final guestSnap = await _db.collection('matchmaking').doc(guestUid).get();
+
+    if (!hostSnap.exists || !guestSnap.exists) return;
+
+    // 3. Create the room
+    await _db.collection('gameRooms').doc(roomId).set({
+      'roomId': roomId,
+      'roomCode': '',
+      'categoryId': categoryId,
+      'categoryName': categoryName,
+      'status': 'waiting',
+      'player1': {...hostSnap.data()!, 'isReady': false, 'score': 0, 'answers': []},
+      'player2': {...guestSnap.data()!, 'isReady': false, 'score': 0, 'answers': []},
+      'createdAt': FieldValue.serverTimestamp(),
+      'questions': questions,
+    });
+
+    // 4. Update both tickets to 'matched' with the real roomId
+    final batch = _db.batch();
+    batch.update(_db.collection('matchmaking').doc(hostUid), {
+      'status': 'matched',
+      'gameRoomId': roomId,
+    });
+    batch.update(_db.collection('matchmaking').doc(guestUid), {
+      'status': 'matched',
+      'gameRoomId': roomId,
+    });
+    await batch.commit();
   }
 
   // Cancel searching
@@ -102,11 +136,30 @@ class MatchmakingRepository {
     await _db.collection('matchmaking').doc(uid).delete();
   }
 
-  // Listen to the matchmaking ticket for updates (e.g., when status becomes 'matched')
+  // Listen to the matchmaking ticket
   Stream<MatchmakingModel?> watchTicket(String uid) {
     return _db.collection('matchmaking').doc(uid).snapshots().map((doc) {
       if (!doc.exists || doc.data() == null) return null;
       return MatchmakingModel.fromJson(doc.data()!);
     });
+  }
+
+  /// Updates the ticket's lastSeen and periodically attempts to find a match 
+  /// if the ticket hasn't been matched yet.
+  Future<void> pingMatchmaking(String uid) async {
+    final ticketRef = _db.collection('matchmaking').doc(uid);
+    final snap = await ticketRef.get();
+    
+    if (!snap.exists) return;
+    
+    final data = snap.data()!;
+    if (data['status'] != 'searching') return;
+
+    // Update lastSeen
+    await ticketRef.update({'lastSeen': FieldValue.serverTimestamp()});
+
+    // Re-trigger searching logic
+    final ticket = MatchmakingModel.fromJson(data);
+    await startSearching(ticket);
   }
 }

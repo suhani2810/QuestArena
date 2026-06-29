@@ -1,6 +1,8 @@
 // WHAT THIS FILE DOES:
 // Represents a player waiting in the queue to find an opponent.
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class MatchmakingModel {
   final String uid;
   final String username;
@@ -12,6 +14,7 @@ class MatchmakingModel {
   final int? categoryId;
   final String categoryName;
   final DateTime searchStartedAt;
+  final DateTime? lastSeen;
 
   MatchmakingModel({
     required this.uid,
@@ -24,6 +27,7 @@ class MatchmakingModel {
     this.categoryId,
     this.categoryName = 'Mixed / Random',
     required this.searchStartedAt,
+    this.lastSeen,
   });
 
   factory MatchmakingModel.fromJson(Map<String, dynamic> json) {
@@ -40,6 +44,11 @@ class MatchmakingModel {
       searchStartedAt: json['searchStartedAt'] != null 
           ? DateTime.parse(json['searchStartedAt']) 
           : DateTime.now(),
+      lastSeen: json['lastSeen'] != null 
+          ? (json['lastSeen'] is Timestamp 
+              ? (json['lastSeen'] as Timestamp).toDate() 
+              : DateTime.parse(json['lastSeen']))
+          : null,
     );
   }
 
@@ -54,5 +63,6 @@ class MatchmakingModel {
     'categoryId': categoryId,
     'categoryName': categoryName,
     'searchStartedAt': searchStartedAt.toIso8601String(),
+    'lastSeen': lastSeen?.toIso8601String(),
   };
 }
