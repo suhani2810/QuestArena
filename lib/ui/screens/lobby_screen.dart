@@ -5,11 +5,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:cached_network_image/cached_network_image.dart';
-import '../../core/constants/colors.dart';
-import '../../core/constants/text_styles.dart';
+import '../../core/theme/app_theme.dart';
 import '../../providers/game_providers.dart';
 import '../../providers/user_providers.dart';
+import '../widgets/character_avatar.dart';
 import 'game_screen.dart';
 
 class LobbyScreen extends ConsumerStatefulWidget {
@@ -64,8 +63,9 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
     final currentUser = ref.watch(currentUserProvider).value;
 
     return Scaffold(
+      backgroundColor: AppColors.bgBase,
       body: roomAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const Center(child: CircularProgressIndicator(color: AppColors.neonCyan)),
         error: (e, s) => Center(child: Text('Error: $e')),
         data: (room) {
           if (room == null) return const Center(child: Text('Room not found'));
@@ -78,6 +78,16 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
             _startCountdown();
           }
 
+          final char1 = kCharacters.firstWhere(
+                (c) => c.id == (p1['avatarUrl'] ?? ''),
+            orElse: () => kCharacters.first,
+          );
+
+          final char2 = p2 != null ? kCharacters.firstWhere(
+                (c) => c.id == (p2['avatarUrl'] ?? ''),
+            orElse: () => kCharacters.first,
+          ) : null;
+
           return Stack(
             children: [
               Column(
@@ -86,27 +96,19 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                   Expanded(
                     child: Container(
                       width: double.infinity,
-                      color: AppColors.purple.withAlpha(25),
+                      color: AppColors.neonViolet.withOpacity(0.05),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          CircleAvatar(
-                            radius: 60, 
-                            backgroundColor: AppColors.surface,
-                            child: ClipOval(
-                              child: CachedNetworkImage(
-                                imageUrl: p1['avatarUrl'] ?? '',
-                                width: 120,
-                                height: 120,
-                                fit: BoxFit.cover,
-                                placeholder: (context, url) => const CircularProgressIndicator(),
-                                errorWidget: (context, url, error) => const Icon(Icons.person, size: 50),
-                              ),
-                            ),
+                          CharacterAvatar(
+                            character: char1,
+                            size: 120,
+                            showGlow: true,
+                            showBorder: true,
                           ),
                           const SizedBox(height: 16),
-                          Text(p1['username'], style: AppTextStyles.headline),
-                          _ReadyBadge(isReady: p1['isReady'] ?? false),
+                          Text(p1['username'], style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: AppColors.textPrimary, letterSpacing: 1)),
+                          _ReadyBadge(isReady: p1['isReady'] ?? false, color: AppColors.neonViolet),
                         ],
                       ),
                     ),
@@ -116,40 +118,33 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                   Expanded(
                     child: Container(
                       width: double.infinity,
-                      color: AppColors.gold.withAlpha(12),
+                      color: AppColors.neonAmber.withOpacity(0.05),
                       child: p2 == null 
                         ? Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const CircularProgressIndicator(color: AppColors.gold),
+                              const CircularProgressIndicator(color: AppColors.neonAmber, strokeWidth: 2),
                               const SizedBox(height: 24),
-                              Text('WAITING FOR OPPONENT', style: AppTextStyles.label),
+                              const Text('WAITING FOR OPPONENT', style: TextStyle(color: AppColors.textMuted, fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 2)),
                               const SizedBox(height: 8),
-                              Text('ROOM CODE:', style: AppTextStyles.label.copyWith(fontSize: 10)),
-                              Text(room.roomCode, style: AppTextStyles.display.copyWith(color: AppColors.gold, fontSize: 32)),
+                              const Text('ROOM CODE:', style: TextStyle(color: AppColors.textMuted, fontSize: 10, letterSpacing: 1)),
+                              Text(room.roomCode, style: const TextStyle(color: AppColors.neonAmber, fontSize: 32, fontWeight: FontWeight.w900, letterSpacing: 4)),
                             ],
                           )
                         : Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              _ReadyBadge(isReady: p2['isReady'] ?? false),
+                              _ReadyBadge(isReady: p2['isReady'] ?? false, color: AppColors.neonAmber),
                               const SizedBox(height: 16),
-                              Text(p2['username'], style: AppTextStyles.headline),
-                          CircleAvatar(
-                            radius: 60, 
-                            backgroundColor: AppColors.surface,
-                            child: ClipOval(
-                              child: CachedNetworkImage(
-                                imageUrl: p2['avatarUrl'] ?? '',
-                                width: 120,
-                                height: 120,
-                                fit: BoxFit.cover,
-                                placeholder: (context, url) => const CircularProgressIndicator(),
-                                errorWidget: (context, url, error) => const Icon(Icons.person, size: 50),
+                              Text(p2['username'], style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: AppColors.textPrimary, letterSpacing: 1)),
+                              const SizedBox(height: 16),
+                              CharacterAvatar(
+                                character: char2!,
+                                size: 120,
+                                showGlow: true,
+                                showBorder: true,
                               ),
-                            ),
-                          ),
-                        ],
+                            ],
                           ),
                     ),
                   ),
@@ -160,17 +155,17 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
               Center(
                 child: Container(
                   padding: const EdgeInsets.all(20),
-                  decoration: const BoxDecoration(color: AppColors.primaryBg, shape: BoxShape.circle),
-                  child: Text('VS', style: AppTextStyles.display.copyWith(color: AppColors.gold)),
+                  decoration: const BoxDecoration(color: AppColors.bgDeep, shape: BoxShape.circle),
+                  child: const Text('VS', style: TextStyle(color: AppColors.neonAmber, fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: 2)),
                 ).animate().scale(delay: 400.ms, curve: Curves.elasticOut),
               ),
 
               // Countdown Overlay
               if (p1['isReady'] == true && p2 != null && p2['isReady'] == true)
                 Container(
-                  color: Colors.black54,
+                  color: Colors.black87,
                   child: Center(
-                    child: Text('$_countdown', style: AppTextStyles.display.copyWith(fontSize: 100))
+                    child: Text('$_countdown', style: const TextStyle(fontSize: 120, fontWeight: FontWeight.w900, color: AppColors.neonCyan))
                         .animate(key: ValueKey(_countdown))
                         .scale(duration: 500.ms)
                         .fadeOut(delay: 500.ms),
@@ -194,10 +189,12 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                           );
                     },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.purple,
+                      backgroundColor: AppColors.neonViolet,
+                      foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-                    child: const Text('I AM READY!'),
+                    child: const Text('I AM READY!', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 2)),
                   ),
                 ),
             ],
@@ -210,7 +207,8 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
 
 class _ReadyBadge extends StatelessWidget {
   final bool isReady;
-  const _ReadyBadge({required this.isReady});
+  final Color color;
+  const _ReadyBadge({required this.isReady, required this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -218,12 +216,13 @@ class _ReadyBadge extends StatelessWidget {
       margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       decoration: BoxDecoration(
-        color: isReady ? AppColors.teal : AppColors.surface,
+        color: isReady ? color.withOpacity(0.2) : AppColors.bgInputField,
         borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: isReady ? color : AppColors.divider),
       ),
       child: Text(
         isReady ? 'READY' : 'WAITING...',
-        style: AppTextStyles.label.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+        style: TextStyle(color: isReady ? color : AppColors.textMuted, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1),
       ),
     );
   }
