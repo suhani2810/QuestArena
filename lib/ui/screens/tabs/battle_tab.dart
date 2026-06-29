@@ -40,7 +40,13 @@ class _BattleTabState extends ConsumerState<BattleTab> {
         categoryName: category.name,
         searchStartedAt: DateTime.now(),
       );
-      await ref.read(matchmakingRepositoryProvider).startSearching(ticket);
+      
+      // We don't await this so the screen opens instantly.
+      // The MatchmakingScreen will handle the search status.
+      ref.read(matchmakingRepositoryProvider).startSearching(ticket).catchError((e) {
+        debugPrint('Matchmaking Error: $e');
+      });
+
       if (mounted) {
         Navigator.push(context,
             MaterialPageRoute(builder: (_) => const MatchmakingScreen()));
