@@ -17,3 +17,14 @@ final leaderboardProvider = StreamProvider.autoDispose<List<LeaderboardModel>>((
   final repo = ref.watch(leaderboardRepositoryProvider);
   return repo.watchTopPlayers();
 });
+
+final weeklyMvpProvider = Provider.autoDispose<LeaderboardModel?>((ref) {
+  final players = ref.watch(leaderboardProvider).value ?? [];
+  if (players.isEmpty) return null;
+
+  // Sort by mvpScore descending and pick the top one
+  final sortedPlayers = List<LeaderboardModel>.from(players);
+  sortedPlayers.sort((a, b) => b.mvpScore.compareTo(a.mvpScore));
+  
+  return sortedPlayers.first;
+});

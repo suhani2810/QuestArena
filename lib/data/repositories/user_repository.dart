@@ -145,6 +145,15 @@ class UserRepository {
         .set(history.toJson());
   }
 
+  Future<void> deleteMatchHistory(String uid, String matchId) async {
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('matchHistory')
+        .doc(matchId)
+        .delete();
+  }
+
   Stream<List<MatchModel>> watchMatchHistory(String uid) {
     return FirebaseFirestore.instance
         .collection('users')

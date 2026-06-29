@@ -151,9 +151,49 @@ class RecentHistorySection extends ConsumerStatefulWidget {
 class _RecentHistorySectionState extends ConsumerState<RecentHistorySection> {
   String _selectedFilter = 'All';
 
+  void _showDeleteConfirmation(String matchId, String? uid) {
+    if (uid == null) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.cardBg,
+        title: Text('DELETE HISTORY?', style: AppTextStyles.headline.copyWith(color: AppColors.red, fontSize: 18)),
+        content: Text(
+          'Are you sure you want to delete this match history? This action cannot be undone.',
+          style: AppTextStyles.bodyMd,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('NO', style: AppTextStyles.label.copyWith(color: AppColors.textSecondary)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              ref.read(userRepositoryProvider).deleteMatchHistory(uid, matchId);
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    'Match history deleted',
+                    style: TextStyle(color: AppColors.textSecondary),
+                  ),
+                  backgroundColor: AppColors.surface,
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.red),
+            child: const Text('YES', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final historyAsync = ref.watch(matchHistoryProvider);
+    final user = ref.watch(currentUserProvider).value;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -222,10 +262,14 @@ class _RecentHistorySectionState extends ConsumerState<RecentHistorySection> {
               itemCount: filteredHistory.length,
               separatorBuilder: (_, __) => const SizedBox(height: 16),
               itemBuilder: (context, index) {
-                return MatchHistoryCard(match: filteredHistory[index])
-                    .animate(key: ValueKey('${filteredHistory[index].id}_$_selectedFilter'))
-                    .fadeIn(duration: 400.ms, delay: (index * 50).ms)
-                    .slideY(begin: 0.2, end: 0);
+                final match = filteredHistory[index];
+                return GestureDetector(
+                  onLongPress: () => _showDeleteConfirmation(match.id, user?.uid),
+                  child: MatchHistoryCard(match: match)
+                      .animate(key: ValueKey('${match.id}_$_selectedFilter'))
+                      .fadeIn(duration: 400.ms, delay: (index * 50).ms)
+                      .slideY(begin: 0.2, end: 0),
+                );
               },
             );
           },

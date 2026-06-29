@@ -17,6 +17,8 @@ class UserModel {
   final int totalWins;
   final int totalLosses;
   final int totalDraws;
+  final int currentStreak;
+  final double averageAccuracy;
   final String rank;
   final List<String> achievements;
 
@@ -32,6 +34,8 @@ class UserModel {
     this.totalWins = 0,
     this.totalLosses = 0,
     this.totalDraws = 0,
+    this.currentStreak = 0,
+    this.averageAccuracy = 0.0,
     this.rank = 'Bronze',
     this.achievements = const [],
   });
@@ -50,6 +54,8 @@ class UserModel {
       totalWins: json['totalWins'] ?? 0,
       totalLosses: json['totalLosses'] ?? 0,
       totalDraws: json['totalDraws'] ?? 0,
+      currentStreak: json['currentStreak'] ?? 0,
+      averageAccuracy: (json['averageAccuracy'] ?? 0).toDouble(),
       rank: json['rank'] ?? 'Bronze',
       achievements: List<String>.from(json['achievements'] ?? []),
     );
@@ -67,6 +73,8 @@ class UserModel {
         'totalWins': totalWins,
         'totalLosses': totalLosses,
         'totalDraws': totalDraws,
+        'currentStreak': currentStreak,
+        'averageAccuracy': averageAccuracy,
         'rank': rank,
         'achievements': achievements,
       };
@@ -80,6 +88,8 @@ class UserModel {
     int? totalWins,
     int? totalLosses,
     int? totalDraws,
+    int? currentStreak,
+    double? averageAccuracy,
   }) {
     return UserModel(
       uid: uid,
@@ -93,6 +103,8 @@ class UserModel {
       totalWins: totalWins ?? this.totalWins,
       totalLosses: totalLosses ?? this.totalLosses,
       totalDraws: totalDraws ?? this.totalDraws,
+      currentStreak: currentStreak ?? this.currentStreak,
+      averageAccuracy: averageAccuracy ?? this.averageAccuracy,
       achievements: achievements,
     );
   }

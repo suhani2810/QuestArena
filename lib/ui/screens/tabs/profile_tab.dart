@@ -4,10 +4,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:intl/intl.dart';
 import '../../../core/constants/colors.dart';
 import '../../../core/constants/text_styles.dart';
 import '../../../providers/user_providers.dart';
 import '../../../providers/auth_providers.dart';
+import '../../../providers/leaderboard_providers.dart';
 import '../../../core/errors/result.dart';
 
 class ProfileTab extends ConsumerWidget {
@@ -16,12 +18,15 @@ class ProfileTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final userAsync = ref.watch(currentUserProvider);
+    final weeklyMvp = ref.watch(weeklyMvpProvider);
 
     return userAsync.when(
       loading: () => const Center(child: CircularProgressIndicator(color: AppColors.gold)),
       error: (e, s) => Center(child: Text('Error: $e')),
       data: (user) {
         if (user == null) return const Center(child: Text('User not found'));
+
+        final isMvp = weeklyMvp?.uid == user.uid;
 
         // List of all possible achievements to show "Locked" ones
         final allAchievements = [
@@ -64,22 +69,52 @@ class ProfileTab extends ConsumerWidget {
                 ),
                 const SizedBox(height: 16),
                 Text(user.username, style: AppTextStyles.headline),
+                
                 Text(user.rank, style: AppTextStyles.label.copyWith(color: AppColors.gold)),
+                
+                if (isMvp) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppColors.gold.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(30),
+                      border: Border.all(color: AppColors.gold.withValues(alpha: 0.4), width: 1.5),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.workspace_premium_rounded, color: AppColors.gold, size: 16),
+                        const SizedBox(width: 8),
+                        Text(
+                          'MVP HOLDER', 
+                          style: AppTextStyles.label.copyWith(
+                            color: AppColors.gold, 
+                            fontSize: 11, 
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 
                 const SizedBox(height: 32),
                 
-                // Stats Summary (Added for better visibility)
+                // Main Stats Row
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    _ProfileStat(label: 'LEVEL', value: '${user.level}'),
-                    _ProfileStat(label: 'WINS', value: '${user.totalWins}'),
-                    _ProfileStat(label: 'COINS', value: '${user.coins}'),
+                    _ProfileStat(label: 'XP', value: '${user.xp}', color: AppColors.purple, icon: Icons.stars_rounded),
+                    _ProfileStat(label: 'WINS', value: '${user.totalWins}', color: AppColors.teal, icon: Icons.emoji_events_rounded),
+                    _ProfileStat(label: 'COINS', value: '${user.coins}', color: AppColors.gold, icon: Icons.monetization_on_rounded),
+                    _ProfileStat(label: 'STREAK', value: '${user.currentStreak}', color: AppColors.red, icon: Icons.whatshot_rounded),
                   ],
                 ),
 
                 const SizedBox(height: 40),
-                
+
                 // Achievement Grid
                 Text('ACHIEVEMENTS', style: AppTextStyles.label),
                 const SizedBox(height: 16),
@@ -191,15 +226,45 @@ class ProfileTab extends ConsumerWidget {
 class _ProfileStat extends StatelessWidget {
   final String label;
   final String value;
-  const _ProfileStat({required this.label, required this.value});
+  final Color color;
+  final IconData icon;
+  
+  const _ProfileStat({
+    required this.label, 
+    required this.value, 
+    required this.color, 
+    required this.icon
+  });
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Text(value, style: AppTextStyles.headline.copyWith(color: AppColors.gold, fontSize: 24)),
-        Text(label, style: AppTextStyles.label.copyWith(fontSize: 10)),
+        Icon(icon, color: color, size: 24),
+        const SizedBox(height: 8),
+        Text(value, style: AppTextStyles.headline.copyWith(color: Colors.white, fontSize: 20)),
+        Text(label, style: AppTextStyles.label.copyWith(fontSize: 10, color: AppColors.textMuted)),
       ],
+    );
+  }
+}
+
+class _StatRow extends StatelessWidget {
+  final String label;
+  final String value;
+  const _StatRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: AppTextStyles.bodyMd.copyWith(color: AppColors.textSecondary)),
+          Text(value, style: AppTextStyles.headline.copyWith(fontSize: 16)),
+        ],
+      ),
     );
   }
 }
