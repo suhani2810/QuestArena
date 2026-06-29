@@ -1,6 +1,8 @@
 // WHAT THIS FILE DOES:
 // The "Source of Truth" for a live 1v1 match.
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class GameRoomModel {
   final String roomId;
   final String roomCode;
@@ -9,7 +11,7 @@ class GameRoomModel {
   final Map<String, dynamic>? player2;
   final List<dynamic> questions;
   final int currentQuestionIndex;
-  final DateTime? questionDeadline;
+  final DateTime? questionStartedAt;
   final String? winnerId;
   final List<String> claimedRewards;
   final List<String> rematchRequests;
@@ -36,7 +38,7 @@ class GameRoomModel {
     this.player2,
     required this.questions,
     this.currentQuestionIndex = 0,
-    this.questionDeadline,
+    this.questionStartedAt,
     this.winnerId,
     this.claimedRewards = const [],
     this.rematchRequests = const [],
@@ -61,8 +63,10 @@ class GameRoomModel {
       player2: json['player2'] != null ? Map<String, dynamic>.from(json['player2']) : null,
       questions: List<dynamic>.from(json['questions'] ?? []),
       currentQuestionIndex: json['currentQuestionIndex'] ?? 0,
-      questionDeadline: json['questionDeadline'] != null 
-          ? DateTime.tryParse(json['questionDeadline'].toString()) 
+      questionStartedAt: json['questionStartedAt'] != null 
+          ? (json['questionStartedAt'] is Timestamp 
+              ? (json['questionStartedAt'] as Timestamp).toDate() 
+              : DateTime.tryParse(json['questionStartedAt'].toString()))
           : null,
       winnerId: json['winnerId'],
       claimedRewards: List<String>.from(json['claimedRewards'] ?? []),
@@ -88,7 +92,7 @@ class GameRoomModel {
     'player2': player2,
     'questions': questions,
     'currentQuestionIndex': currentQuestionIndex,
-    'questionDeadline': questionDeadline?.toIso8601String(),
+    'questionStartedAt': questionStartedAt != null ? Timestamp.fromDate(questionStartedAt!) : null,
     'winnerId': winnerId,
     'claimedRewards': claimedRewards,
     'rematchRequests': rematchRequests,
@@ -103,4 +107,41 @@ class GameRoomModel {
     'presence': presence,
     'forfeitWinnerId': forfeitWinnerId,
   };
+
+  GameRoomModel copyWith({
+    String? status,
+    Map<String, dynamic>? player1,
+    Map<String, dynamic>? player2,
+    int? currentQuestionIndex,
+    DateTime? questionStartedAt,
+    String? winnerId,
+    bool? isArenaBreaker,
+    Map<String, dynamic>? arenaBreakerQuestion,
+    Map<String, dynamic>? arenaBreakerSubmissions,
+    bool? isArenaBreakerWin,
+  }) {
+    return GameRoomModel(
+      roomId: roomId,
+      roomCode: roomCode,
+      status: status ?? this.status,
+      player1: player1 ?? this.player1,
+      player2: player2 ?? this.player2,
+      questions: questions,
+      currentQuestionIndex: currentQuestionIndex ?? this.currentQuestionIndex,
+      questionStartedAt: questionStartedAt ?? this.questionStartedAt,
+      winnerId: winnerId ?? this.winnerId,
+      claimedRewards: claimedRewards,
+      rematchRequests: rematchRequests,
+      nextMatchId: nextMatchId,
+      categoryId: categoryId,
+      categoryName: categoryName,
+      isArenaBreaker: isArenaBreaker ?? this.isArenaBreaker,
+      arenaBreakerQuestion: arenaBreakerQuestion ?? this.arenaBreakerQuestion,
+      arenaBreakerSubmissions: arenaBreakerSubmissions ?? this.arenaBreakerSubmissions,
+      isArenaBreakerWin: isArenaBreakerWin ?? this.isArenaBreakerWin,
+      arenaBreakerStatusMessage: arenaBreakerStatusMessage,
+      presence: presence,
+      forfeitWinnerId: forfeitWinnerId,
+    );
+  }
 }

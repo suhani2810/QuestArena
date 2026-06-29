@@ -27,18 +27,32 @@ class MatchmakingRepository {
     });
 
     // 2. Look for potential opponents
-    // We only want players who are 'searching' and have been seen in the last 30 seconds
+    // We filter by status and category in Firestore. This is more efficient.
     final thirtySecondsAgo = DateTime.now().subtract(const Duration(seconds: 30));
     
     final potentialMatches = await _db.collection('matchmaking')
         .where('status', isEqualTo: 'searching')
         .where('categoryId', isEqualTo: ticket.categoryId)
-        .where('searchStartedAt', isGreaterThan: thirtySecondsAgo.toIso8601String())
-        .limit(10)
+        .limit(20)
         .get();
 
     for (final doc in potentialMatches.docs) {
       if (doc.id == ticket.uid) continue;
+
+      final data = doc.data();
+      
+      // Filter staleness in Dart to avoid needing a 3-field composite index
+      final DateTime startedAt;
+      final startedAtRaw = data['searchStartedAt'];
+      if (startedAtRaw == null) continue;
+      
+      if (startedAtRaw is Timestamp) {
+        startedAt = startedAtRaw.toDate();
+      } else {
+        startedAt = DateTime.parse(startedAtRaw.toString());
+      }
+
+      if (startedAt.isBefore(thirtySecondsAgo)) continue;
 
       // 3. Attempt to "Claim" this opponent via Transaction
       final opponentUid = doc.id;

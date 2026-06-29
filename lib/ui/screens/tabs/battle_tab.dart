@@ -11,6 +11,7 @@ import '../../../providers/matchmaking_providers.dart';
 import '../matchmaking_screen.dart';
 import '../private_room_screen.dart';
 import '../../widgets/category_picker_sheet.dart';
+import '../../../features/practice/screens/practice_setup_screen.dart';
 
 class BattleTab extends ConsumerStatefulWidget {
   const BattleTab({super.key});
@@ -97,7 +98,9 @@ class _BattleTabState extends ConsumerState<BattleTab> {
                 subtitle: 'Sharpen your skills (No XP)',
                 icon: Icons.psychology_rounded,
                 color: AppColors.teal,
-                onTap: () {},
+                onTap: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const PracticeSetupScreen()));
+                },
               ),
             ],
           ),

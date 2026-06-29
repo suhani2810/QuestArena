@@ -42,7 +42,9 @@ class MatchmakingModel {
       categoryId: json['categoryId'],
       categoryName: json['categoryName'] ?? 'Mixed / Random',
       searchStartedAt: json['searchStartedAt'] != null 
-          ? DateTime.parse(json['searchStartedAt']) 
+          ? (json['searchStartedAt'] is Timestamp 
+              ? (json['searchStartedAt'] as Timestamp).toDate() 
+              : DateTime.parse(json['searchStartedAt'].toString()))
           : DateTime.now(),
       lastSeen: json['lastSeen'] != null 
           ? (json['lastSeen'] is Timestamp 
