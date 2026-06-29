@@ -1,6 +1,8 @@
 // WHAT THIS FILE DOES:
-// Optimized core quiz screen. Isolated rebuilds for maximum performance.
+// Optimized core quiz screen. 
+// Features: Heartbeat, Robust Reconnect, Independent Match Progression.
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -20,59 +22,106 @@ class GameScreen extends ConsumerStatefulWidget {
   ConsumerState<GameScreen> createState() => _GameScreenState();
 }
 
-class _GameScreenState extends ConsumerState<GameScreen> with SingleTickerProviderStateMixin {
+class _GameScreenState extends ConsumerState<GameScreen>
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late AnimationController _timerController;
   String? _selectedAnswer;
   bool _hasAnswered = false;
   List<String> _shuffledOptions = [];
+  List<String> _fiftyFiftyHiddenOptions = [];
   int _lastQuestionIndex = -1;
-  int _processedIndex = -1;
+  bool _hasUsedFiftyFifty = false;
+
+  // Heartbeat & Timer state
+  Timer? _heartbeatTimer;
+  Timer? _syncTimer;
+  Timer? _forfeitTimer;
+  int _forfeitCountdown = 20;
+  bool _isOpponentDisconnected = false;
+  bool _showABIntro = true;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _startHeartbeat();
+    _updatePresence(true);
+
     _timerController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 15),
-    )..reverse(from: 1.0);
+    );
 
-    _timerController.addStatusListener((status) {
-      if (status == AnimationStatus.dismissed && !_hasAnswered) {
-        _handleAnswerSelection("TIMEOUT");
-      }
-    });
+    // Sync timer every second
+    _syncTimer = Timer.periodic(const Duration(seconds: 1), (_) => _syncState());
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _heartbeatTimer?.cancel();
+    _syncTimer?.cancel();
+    _forfeitTimer?.cancel();
+    _updatePresence(false);
     _timerController.dispose();
     super.dispose();
   }
 
-  void _prepareOptions(GameRoomModel room) {
-    if (_lastQuestionIndex != room.currentQuestionIndex) {
-      final question = room.questions[room.currentQuestionIndex];
-      _shuffledOptions = List<String>.from(question['incorrect_answers'])
-        ..add(question['correct_answer'])
-        ..shuffle();
-      _lastQuestionIndex = room.currentQuestionIndex;
-    }
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _updatePresence(state == AppLifecycleState.resumed);
+  }
 
-    if (_processedIndex != room.currentQuestionIndex) {
-      _processedIndex = room.currentQuestionIndex;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          setState(() {
-            _hasAnswered = false;
-            _selectedAnswer = null;
-          });
-          _timerController.reverse(from: 1.0);
-        }
-      });
+  void _startHeartbeat() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 5), (_) => _updatePresence(true));
+  }
+
+  void _updatePresence(bool isOnline) {
+    final user = ref.read(currentUserProvider).value;
+    if (user != null) {
+      ref.read(gameRepositoryProvider).updatePresence(widget.roomId, user.uid, isOnline);
     }
   }
 
-  void _handleAnswerSelection(String answer) async {
+  void _syncState() {
+    final room = ref.read(gameRoomProvider(widget.roomId)).value;
+    if (room == null || (room.status != 'active' && room.status != 'arena_breaker')) return;
+
+    if (room.questionStartedAt != null) {
+      final now = DateTime.now();
+      final elapsedMs = now.difference(room.questionStartedAt!).inMilliseconds;
+      final remainingMs = 15000 - elapsedMs;
+
+      if (remainingMs <= 0) {
+        // Timer EXPIRED - Driver logic
+        if (!_hasAnswered && _timerController.isAnimating) {
+          _timerController.stop();
+          _handleTimeout();
+        }
+        // Force server to move to next Q if it hasn't yet (Driver role)
+        if (room.status == 'active') {
+          ref.read(gameRepositoryProvider).forceAdvanceQuestion(widget.roomId, room.currentQuestionIndex);
+        }
+      } else {
+        // Sync local timer animation
+        final targetValue = remainingMs / 15000.0;
+        if ((_timerController.value - targetValue).abs() > 0.05 || !_timerController.isAnimating) {
+          if (!_hasAnswered) {
+            _timerController.duration = Duration(milliseconds: remainingMs);
+            _timerController.reverse(from: targetValue);
+          }
+        }
+      }
+    }
+  }
+
+  void _handleTimeout() async {
+    if (_hasAnswered) return;
+    _onAnswerSelected("TIMEOUT");
+  }
+
+  void _onAnswerSelected(String answer) async {
     if (_hasAnswered) return;
 
     setState(() {
@@ -91,171 +140,435 @@ class _GameScreenState extends ConsumerState<GameScreen> with SingleTickerProvid
 
     int score = 0;
     if (isCorrect) {
-      score = 10 + (_timerController.value * 5).toInt();
+      // Calculate score based on remaining time
+      final remainingRatio = _timerController.value;
+      score = 10 + (remainingRatio * 5).toInt();
     }
 
     await ref.read(gameRepositoryProvider).submitAnswer(
-      roomId: widget.roomId,
-      userId: user.uid,
-      playerNumber: isP1 ? 1 : 2,
-      answer: answer,
-      scoreIncrement: score,
-    );
+          roomId: widget.roomId,
+          userId: user.uid,
+          playerNumber: isP1 ? 1 : 2,
+          answer: answer,
+          scoreIncrement: score,
+        );
+  }
+
+  void _handleABAnswerSelection(String answer) async {
+    if (_hasAnswered) return;
+    setState(() {
+      _selectedAnswer = answer;
+      _hasAnswered = true;
+    });
+    _timerController.stop();
+
+    final user = ref.read(currentUserProvider).value;
+    if (user == null) return;
+
+    await ref.read(gameRepositoryProvider).submitArenaBreakerAnswer(
+          roomId: widget.roomId,
+          userId: user.uid,
+          answer: answer,
+        );
+  }
+
+  void _startForfeitTimer() {
+    _forfeitTimer?.cancel();
+    setState(() => _forfeitCountdown = 20);
+    _forfeitTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_forfeitCountdown > 0) {
+        if (mounted) setState(() => _forfeitCountdown--);
+      } else {
+        _forfeitTimer?.cancel();
+        final user = ref.read(currentUserProvider).value;
+        if (user != null) ref.read(gameRepositoryProvider).handleForfeit(widget.roomId, user.uid);
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    // Listen for completion to navigate away
-    ref.listen(gameRoomProvider(widget.roomId), (prev, next) {
-      if (next.value?.status == 'finished') {
+    final user = ref.watch(currentUserProvider).value;
+    if (user == null) return const Scaffold();
+
+    ref.listen<AsyncValue<GameRoomModel?>>(gameRoomProvider(widget.roomId), (prev, next) {
+      final room = next.value;
+      if (room == null) return;
+
+      if (room.status == 'finished') {
+        _heartbeatTimer?.cancel();
+        _syncTimer?.cancel();
+        _forfeitTimer?.cancel();
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => ResultScreen(room: next.value!)),
+          MaterialPageRoute(builder: (_) => ResultScreen(room: room)),
         );
+        return;
+      }
+
+      // Detect New Question
+      if (_lastQuestionIndex != room.currentQuestionIndex) {
+        _lastQuestionIndex = room.currentQuestionIndex;
+        _prepareOptions(room);
+        setState(() {
+          _hasAnswered = false;
+          _selectedAnswer = null;
+          _fiftyFiftyHiddenOptions = [];
+        });
+        _syncState(); // Immediate sync for new Q
+      }
+
+      // Presence Logic
+      final String p1Uid = room.player1['uid'] ?? '';
+      final String? p2Uid = room.player2?['uid'];
+      final String? opponentId = user.uid == p1Uid ? p2Uid : p1Uid;
+
+      if (opponentId != null && (room.status == 'active' || room.status == 'arena_breaker')) {
+        final presence = room.presence[opponentId];
+        final lastSeen = presence?['lastSeen'] as DateTime?;
+        final isOnline = presence?['isOnline'] ?? true;
+        
+        bool disconnected = !isOnline || (lastSeen != null && DateTime.now().difference(lastSeen).inSeconds > 15);
+
+        if (disconnected && !_isOpponentDisconnected) {
+          setState(() => _isOpponentDisconnected = true);
+          _startForfeitTimer();
+        } else if (!disconnected && _isOpponentDisconnected) {
+          setState(() => _isOpponentDisconnected = false);
+          _forfeitTimer?.cancel();
+        }
       }
     });
 
     final roomAsync = ref.watch(gameRoomProvider(widget.roomId));
 
-    return Scaffold(
-      body: roomAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator(color: AppColors.gold)),
-        error: (e, s) => Center(child: Text('Error: $e')),
-        data: (room) {
-          if (room == null) return const Center(child: Text('Room Error'));
-          
-          if (room.questions.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const CircularProgressIndicator(color: AppColors.gold),
-                  const SizedBox(height: 24),
-                  Text('Waiting for questions...', style: AppTextStyles.bodyMd),
-                  const SizedBox(height: 40),
-                  TextButton(
-                    onPressed: () => ref.read(gameRepositoryProvider).triggerQuestionsFallback(widget.roomId),
-                    child: Text('TAP HERE IF STUCK (FALLBACK)', style: AppTextStyles.label.copyWith(color: AppColors.gold)),
-                  ),
-                ],
-              ),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _showLeaveDialog();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          leading: IconButton(icon: const Icon(Icons.close_rounded), onPressed: _showLeaveDialog),
+          title: _isOpponentDisconnected 
+            ? Text('OPPONENT DISCONNECTED', style: AppTextStyles.label.copyWith(color: AppColors.red, fontSize: 10))
+            : null,
+          centerTitle: true,
+        ),
+        body: roomAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator(color: AppColors.gold)),
+          error: (e, s) => Center(child: Text('Error: $e')),
+          data: (room) {
+            if (room == null) return const Center(child: Text('Room Error'));
+            return Stack(
+              children: [
+                _buildMainUI(room),
+                if (_isOpponentDisconnected) _buildDisconnectBanner(),
+              ],
             );
-          }
+          },
+        ),
+      ),
+    );
+  }
 
-          _prepareOptions(room);
-          final question = room.questions[room.currentQuestionIndex];
-          final qText = GameUtils.decodeHtmlEntities(question['question']);
+  Widget _buildMainUI(GameRoomModel room) {
+    if (room.status == 'arena_breaker') return _buildArenaBreakerRound(room);
+    if (room.questions.isEmpty) return const Center(child: CircularProgressIndicator());
 
-          return SafeArea(
-            child: SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.all(24.0),
-                child: Column(
-                  children: [
-                    // Header with scores
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        _PlayerScore(
-                          name: room.player1['username'], 
-                          score: room.player1['score'] ?? 0, 
-                          isLeft: true,
-                          hasAnswered: (room.player1['answers'] as List).length > room.currentQuestionIndex,
-                        ),
-                        Text('${room.currentQuestionIndex + 1}/${room.questions.length}', style: AppTextStyles.label),
-                        _PlayerScore(
-                          name: room.player2?['username'] ?? 'Opponent', 
-                          score: room.player2?['score'] ?? 0,
-                          isLeft: false,
-                          hasAnswered: (room.player2?['answers'] as List? ?? []).length > room.currentQuestionIndex,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 40),
-                    
-                    // Timer bar
-                    RepaintBoundary(
-                      child: AnimatedBuilder(
-                        animation: _timerController,
-                        builder: (context, child) => LinearProgressIndicator(
-                          value: _timerController.value,
-                          backgroundColor: AppColors.surface,
-                          color: _timerController.value < 0.3 ? AppColors.red : AppColors.gold,
-                          minHeight: 10,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 40),
+    final question = room.questions[room.currentQuestionIndex];
 
-                    // Question Text
-                    Text(
-                      qText,
-                      style: AppTextStyles.headline,
-                      textAlign: TextAlign.center,
-                    ).animate(key: ValueKey(room.currentQuestionIndex)).fadeIn().scale(),
-                    
-                    const SizedBox(height: 40),
-
-                    // Shuffled Options
-                    ..._shuffledOptions.map((option) {
-                      final decodedOption = GameUtils.decodeHtmlEntities(option);
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 16),
-                        child: _AnswerButton(
-                          text: decodedOption,
-                          isSelected: _selectedAnswer == option,
-                          isCorrect: _hasAnswered && option == question['correct_answer'],
-                          isWrong: _hasAnswered && _selectedAnswer == option && option != question['correct_answer'],
-                          onTap: () => _handleAnswerSelection(option),
-                        ),
-                      );
-                    }),
-
-                    if (_hasAnswered)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 20),
-                        child: Text(
-                          'Waiting for opponent...',
-                          style: AppTextStyles.label.copyWith(color: AppColors.gold),
-                        ).animate(onPlay: (c) => c.repeat()).fadeIn().fadeOut(),
-                      ),
-                  ],
-                ),
+    return SafeArea(
+      child: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          children: [
+            _buildHeader(room),
+            const SizedBox(height: 32),
+            _buildTimerBar(),
+            const SizedBox(height: 32),
+            _buildPowerups(room),
+            const SizedBox(height: 24),
+            Text(GameUtils.decodeHtmlEntities(question['question']), 
+                style: AppTextStyles.headline, textAlign: TextAlign.center)
+                .animate(key: ValueKey(room.currentQuestionIndex))
+                .fadeIn(),
+            const SizedBox(height: 32),
+            ..._shuffledOptions
+                .where((opt) => !_fiftyFiftyHiddenOptions.contains(opt))
+                .map((opt) => Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: _AnswerButton(
+                text: GameUtils.decodeHtmlEntities(opt),
+                isSelected: _selectedAnswer == opt,
+                isCorrect: _hasAnswered && opt == question['correct_answer'],
+                isWrong: _hasAnswered && _selectedAnswer == opt && opt != question['correct_answer'],
+                onTap: () => _onAnswerSelected(opt),
               ),
-            ),
-          );
-        },
+            )),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader(GameRoomModel room) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        _PlayerStat(name: room.player1['username'], score: room.player1['score'], isLeft: true),
+        Text('${room.currentQuestionIndex + 1}/10', style: AppTextStyles.label),
+        _PlayerStat(name: room.player2?['username'] ?? '...', score: room.player2?['score'] ?? 0, isLeft: false),
+      ],
+    );
+  }
+
+  Widget _buildTimerBar() {
+    return RepaintBoundary(
+      child: AnimatedBuilder(
+        animation: _timerController,
+        builder: (_, __) => LinearProgressIndicator(
+          value: _timerController.value,
+          backgroundColor: AppColors.surface,
+          color: _timerController.value < 0.3 ? AppColors.red : AppColors.gold,
+          minHeight: 10,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPowerups(GameRoomModel room) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        _PowerupButton(
+          label: '50/50',
+          icon: Icons.filter_2_rounded,
+          isUsed: _hasUsedFiftyFifty,
+          isDisabled: _hasAnswered,
+          onTap: () => _useFiftyFifty(room),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDisconnectBanner() {
+    return Positioned(
+      top: 0, left: 0, right: 0,
+      child: Container(
+        color: AppColors.red.withValues(alpha: 0.95),
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          children: [
+            const Text('Opponent disconnected.', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+            Text('Ending in $_forfeitCountdown seconds...', style: const TextStyle(fontSize: 12, color: Colors.white70)),
+          ],
+        ),
+      ).animate().slideY(begin: -1, end: 0),
+    );
+  }
+
+  void _showLeaveDialog() async {
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.cardBg,
+        title: Text('FORFEIT?', style: AppTextStyles.headline.copyWith(color: AppColors.red)),
+        content: const Text('Leaving will grant your opponent an immediate win.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('CANCEL')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), style: ElevatedButton.styleFrom(backgroundColor: AppColors.red), child: const Text('LEAVE')),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      final room = ref.read(gameRoomProvider(widget.roomId)).value;
+      final user = ref.read(currentUserProvider).value;
+      if (room != null && user != null) {
+        final p1Uid = room.player1['uid'];
+        final p2Uid = room.player2?['uid'];
+        final String? opponentId = user.uid == p1Uid ? p2Uid : p1Uid;
+        if (opponentId != null) {
+          ref.read(gameRepositoryProvider).leaveMatch(widget.roomId, user.uid, opponentId);
+        }
+      }
+    }
+  }
+
+  void _prepareOptions(GameRoomModel room) {
+    if (room.currentQuestionIndex >= 0 && room.currentQuestionIndex < room.questions.length) {
+      final question = room.questions[room.currentQuestionIndex];
+      _shuffledOptions = List<String>.from(question['incorrect_answers'])..add(question['correct_answer'])..shuffle();
+    }
+  }
+
+  void _useFiftyFifty(GameRoomModel room) {
+    if (_hasUsedFiftyFifty || _hasAnswered) return;
+    final question = room.questions[room.currentQuestionIndex];
+    final wrong = _shuffledOptions.where((o) => o != question['correct_answer']).toList()..shuffle();
+    setState(() {
+      _hasUsedFiftyFifty = true;
+      _fiftyFiftyHiddenOptions = wrong.take(2).toList();
+    });
+  }
+
+  Widget _buildArenaBreakerRound(GameRoomModel room) {
+    if (_showABIntro) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text('⚔ ARENA BREAKER ⚔', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.red)).animate().scale(duration: 600.ms, curve: Curves.elasticOut),
+            const SizedBox(height: 12),
+            Text('Scores Tied', style: AppTextStyles.headline),
+            const SizedBox(height: 8),
+            Text('Next correct answer wins.', style: AppTextStyles.label),
+            const SizedBox(height: 48),
+            _ABCountdown(onFinished: () => setState(() => _showABIntro = false)),
+          ],
+        ),
+      );
+    }
+
+    if (room.arenaBreakerStatusMessage != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.sync_problem_rounded, color: AppColors.red, size: 64).animate(onPlay: (c) => c.repeat()).rotate(duration: 2.seconds),
+            const SizedBox(height: 24),
+            Text(room.arenaBreakerStatusMessage!, style: AppTextStyles.headline, textAlign: TextAlign.center),
+          ],
+        ),
+      );
+    }
+
+    final question = room.arenaBreakerQuestion;
+    if (question == null) return const Center(child: CircularProgressIndicator());
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          children: [
+            Text('⚔ SUDDEN DEATH ⚔', style: AppTextStyles.label.copyWith(color: AppColors.red)),
+            const SizedBox(height: 40),
+            _buildTimerBar(),
+            const SizedBox(height: 40),
+            Text(GameUtils.decodeHtmlEntities(question['question']), style: AppTextStyles.headline, textAlign: TextAlign.center).animate().fadeIn(),
+            const SizedBox(height: 40),
+            ..._shuffledOptions.map((opt) => Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: _AnswerButton(
+                text: GameUtils.decodeHtmlEntities(opt),
+                isSelected: _selectedAnswer == opt,
+                onTap: () => _handleABAnswerSelection(opt),
+                isCorrect: false, isWrong: false,
+              ),
+            )),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _PlayerScore extends StatelessWidget {
+class _PlayerStat extends StatelessWidget {
   final String name;
   final int score;
   final bool isLeft;
-  final bool hasAnswered;
-
-  const _PlayerScore({
-    required this.name, 
-    required this.score, 
-    required this.isLeft,
-    required this.hasAnswered,
-  });
+  const _PlayerStat({required this.name, required this.score, required this.isLeft});
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: isLeft ? CrossAxisAlignment.start : CrossAxisAlignment.end,
       children: [
-        Text(name, style: AppTextStyles.label.copyWith(
-          color: hasAnswered ? AppColors.teal : AppColors.textSecondary,
-        )),
-        Text('$score', style: AppTextStyles.headline.copyWith(
-          color: hasAnswered ? AppColors.teal : AppColors.gold,
-          fontSize: 20,
-        )),
+        Text(name, style: AppTextStyles.label),
+        Text('$score', style: AppTextStyles.headline.copyWith(color: AppColors.gold, fontSize: 20)),
       ],
     );
+  }
+}
+
+class _PowerupButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool isUsed;
+  final bool isDisabled;
+  final VoidCallback onTap;
+
+  const _PowerupButton({required this.label, required this.icon, required this.isUsed, required this.isDisabled, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final disabled = isUsed || isDisabled;
+    return GestureDetector(
+      onTap: disabled ? null : onTap,
+      child: AnimatedOpacity(
+        opacity: disabled ? 0.45 : 1,
+        duration: const Duration(milliseconds: 200),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+          decoration: BoxDecoration(
+            color: AppColors.purple.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: isUsed ? AppColors.surface : AppColors.purple, width: 1.5),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(isUsed ? Icons.check_circle_rounded : icon, color: isUsed ? AppColors.textMuted : AppColors.purple, size: 18),
+              const SizedBox(width: 8),
+              Text(isUsed ? '$label USED' : label, style: AppTextStyles.label.copyWith(color: isUsed ? AppColors.textMuted : Colors.white, fontWeight: FontWeight.bold)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ABCountdown extends StatefulWidget {
+  final VoidCallback onFinished;
+  const _ABCountdown({required this.onFinished});
+
+  @override
+  State<_ABCountdown> createState() => _ABCountdownState();
+}
+
+class _ABCountdownState extends State<_ABCountdown> {
+  int _count = 3;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (_count > 1) {
+        if (mounted) setState(() => _count--);
+      } else {
+        _timer?.cancel();
+        widget.onFinished();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Text('$_count', style: AppTextStyles.display.copyWith(fontSize: 80, color: AppColors.gold))
+        .animate(key: ValueKey(_count))
+        .scale(duration: 400.ms)
+        .fadeOut(delay: 600.ms);
   }
 }
 
@@ -266,13 +579,7 @@ class _AnswerButton extends StatelessWidget {
   final bool isWrong;
   final VoidCallback onTap;
 
-  const _AnswerButton({
-    required this.text,
-    required this.isSelected,
-    required this.isCorrect,
-    required this.isWrong,
-    required this.onTap,
-  });
+  const _AnswerButton({required this.text, required this.isSelected, required this.isCorrect, required this.isWrong, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -282,30 +589,11 @@ class _AnswerButton extends StatelessWidget {
         width: double.infinity,
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: isCorrect 
-              ? AppColors.teal.withOpacity(0.1) 
-              : isWrong 
-                  ? AppColors.red.withOpacity(0.1) 
-                  : AppColors.cardBg,
+          color: isCorrect ? Colors.teal.withValues(alpha: 0.1) : (isWrong ? Colors.red.withValues(alpha: 0.1) : AppColors.cardBg),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isCorrect 
-                ? AppColors.teal 
-                : isWrong 
-                    ? AppColors.red 
-                    : isSelected 
-                        ? AppColors.purple 
-                        : AppColors.surface, 
-            width: 2
-          ),
+          border: Border.all(color: isCorrect ? Colors.teal : (isWrong ? Colors.red : (isSelected ? AppColors.purple : AppColors.surface)), width: 2),
         ),
-        child: Text(
-          text,
-          style: AppTextStyles.bodyMd.copyWith(
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-          ),
-          textAlign: TextAlign.center,
-        ),
+        child: Text(text, style: AppTextStyles.bodyMd.copyWith(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal), textAlign: TextAlign.center),
       ),
     );
   }

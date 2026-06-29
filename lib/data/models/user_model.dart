@@ -26,6 +26,8 @@ class UserModel {
   final int highestWinStreak;
   final DateTime? lastDailyBonusDate;
   final List<String> achievements;
+  final int arenaBreakerWins;
+  final int arenaBreakerLosses;
 
   UserModel({
     required this.uid,
@@ -46,6 +48,8 @@ class UserModel {
     this.highestWinStreak = 0,
     this.lastDailyBonusDate,
     this.achievements = const [],
+    this.arenaBreakerWins = 0,
+    this.arenaBreakerLosses = 0,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -78,6 +82,8 @@ class UserModel {
           ? (json['lastDailyBonusDate'] as Timestamp).toDate()
           : null,
       achievements: List<String>.from(json['achievements'] ?? []),
+      arenaBreakerWins: json['arenaBreakerWins'] ?? 0,
+      arenaBreakerLosses: json['arenaBreakerLosses'] ?? 0,
     );
   }
 
@@ -102,6 +108,8 @@ class UserModel {
             ? Timestamp.fromDate(lastDailyBonusDate!)
             : null,
         'achievements': achievements,
+        'arenaBreakerWins': arenaBreakerWins,
+        'arenaBreakerLosses': arenaBreakerLosses,
       };
 
   UserModel copyWith({
@@ -110,6 +118,8 @@ class UserModel {
     int? xp,
     int? level,
     String? rank,
+    int? arenaBreakerWins,
+    int? arenaBreakerLosses,
     int? subRank,
     int? rankPoints,
     int? coins,
@@ -131,6 +141,12 @@ class UserModel {
       xp: xp ?? this.xp,
       level: level ?? this.level,
       rank: rank ?? this.rank,
+      level: level,
+      totalWins: totalWins,
+      totalLosses: totalLosses,
+      achievements: achievements,
+      arenaBreakerWins: arenaBreakerWins ?? this.arenaBreakerWins,
+      arenaBreakerLosses: arenaBreakerLosses ?? this.arenaBreakerLosses,
       subRank: clearSubRank ? null : (subRank ?? this.subRank),
       rankPoints: rankPoints ?? this.rankPoints,
       coins: coins ?? this.coins,

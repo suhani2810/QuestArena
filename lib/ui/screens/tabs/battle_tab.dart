@@ -10,6 +10,8 @@ import '../../../data/models/matchmaking_model.dart';
 import '../../../providers/matchmaking_providers.dart';
 import '../matchmaking_screen.dart';
 import '../private_room_screen.dart';
+import '../../widgets/category_picker_sheet.dart';
+import '../../../features/practice/screens/practice_setup_screen.dart';
 
 class BattleTab extends ConsumerStatefulWidget {
   const BattleTab({super.key});
@@ -21,10 +23,36 @@ class BattleTab extends ConsumerStatefulWidget {
 class _BattleTabState extends ConsumerState<BattleTab> {
   bool _isStartingMatch = false;
 
+  Future<void> _chooseAndStartMatch() async {
+    final user = ref.read(currentUserProvider).value;
+    if (user == null) return;
+
+    final category = await CategoryPickerSheet.show(context);
+    if (category == null || !mounted) return;
+
+    setState(() => _isStartingMatch = true);
+    try {
+      final ticket = MatchmakingModel(
+        uid: user.uid,
+        username: user.username,
+        avatarUrl: user.avatarUrl,
+        rank: user.rank,
+        categoryId: category.id,
+        categoryName: category.name,
+        searchStartedAt: DateTime.now(),
+      );
+      await ref.read(matchmakingRepositoryProvider).startSearching(ticket);
+      if (mounted) {
+        Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const MatchmakingScreen()));
+      }
+    } finally {
+      if (mounted) setState(() => _isStartingMatch = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final user = ref.watch(currentUserProvider).value;
-
     return Scaffold(
       body: SafeArea(
         child: Padding(
@@ -42,26 +70,7 @@ class _BattleTabState extends ConsumerState<BattleTab> {
                 subtitle: _isStartingMatch ? 'Starting...' : 'Compete for XP and Rank',
                 icon: _isStartingMatch ? Icons.hourglass_bottom_rounded : Icons.flash_on_rounded,
                 color: AppColors.purple,
-                onTap: _isStartingMatch ? () {} : () async {
-                  if (user != null) {
-                    setState(() => _isStartingMatch = true);
-                    try {
-                      final ticket = MatchmakingModel(
-                        uid: user.uid,
-                        username: user.username,
-                        avatarUrl: user.avatarUrl,
-                        rank: user.rank,
-                        searchStartedAt: DateTime.now(),
-                      );
-                      await ref.read(matchmakingRepositoryProvider).startSearching(ticket);
-                      if (mounted) {
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => const MatchmakingScreen()));
-                      }
-                    } finally {
-                      if (mounted) setState(() => _isStartingMatch = false);
-                    }
-                  }
-                },
+                onTap: _isStartingMatch ? () {} : _chooseAndStartMatch,
               ),
               
               const SizedBox(height: 16),
@@ -83,7 +92,9 @@ class _BattleTabState extends ConsumerState<BattleTab> {
                 subtitle: 'Sharpen your skills (No XP)',
                 icon: Icons.psychology_rounded,
                 color: AppColors.teal,
-                onTap: () {},
+                onTap: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const PracticeSetupScreen()));
+                },
               ),
             ],
           ),

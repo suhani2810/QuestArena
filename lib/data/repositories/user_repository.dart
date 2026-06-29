@@ -20,17 +20,20 @@ class UserRepository {
 
   Future<Result<void>> createUserProfile(UserModel user) async {
     try {
-      // 1. Check if the username is taken
+      // Check if username is already taken
       final isAvailable = await _service.isUsernameAvailable(user.username);
+
       if (!isAvailable) {
-        return const Failure(DatabaseError("Username already taken."));
+        return const Failure(
+          DatabaseError("Username already taken."),
+        );
       }
 
-      // 2. Try to save the document
       await _service.setData(
         path: 'users/${user.uid}',
         data: user.toJson(),
       );
+
       return const Success(null);
     } catch (e) {
       return Failure(DatabaseError(e.toString()));
@@ -40,10 +43,30 @@ class UserRepository {
   Future<Result<UserModel>> getUserProfile(String uid) async {
     try {
       final doc = await _service.getDocument('users/$uid');
+
       if (doc.exists) {
-        return Success(UserModel.fromJson(doc.data() as Map<String, dynamic>));
+        return Success(
+          UserModel.fromJson(
+            doc.data() as Map<String, dynamic>,
+          ),
+        );
       }
-      return const Failure(DatabaseError("User profile not found."));
+
+      return const Failure(
+        DatabaseError("User profile not found."),
+      );
+    } catch (e) {
+      return Failure(DatabaseError(e.toString()));
+    }
+  }
+
+  Future<Result<void>> updateUserProfile(UserModel user) async {
+    try {
+      await _service.setData(
+        path: 'users/${user.uid}',
+        data: user.toJson(),
+      );
+      return const Success(null);
     } catch (e) {
       return Failure(DatabaseError(e.toString()));
     }
@@ -68,6 +91,9 @@ class UserRepository {
   Future<MatchEndResult?> processMatchEnd({
     required String uid,
     required bool isWin,
+    bool isArenaBreakerWin = false,
+  }) async {
+    final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
     required bool isDraw,
     required int correctAnswers,
     required int totalQuestions,
@@ -80,6 +106,25 @@ class UserRepository {
       final snapshot = await transaction.get(userRef);
       if (!snapshot.exists) return;
 
+      final data = snapshot.data()!;
+      int currentXp = data['xp'] ?? 0;
+      int currentLevel = data['level'] ?? 1;
+      int currentCoins = data['coins'] ?? 0;
+      int wins = data['totalWins'] ?? 0;
+      int losses = data['totalLosses'] ?? 0;
+      int abWins = data['arenaBreakerWins'] ?? 0;
+      int abLosses = data['arenaBreakerLosses'] ?? 0;
+
+      // Update XP and Coins
+      currentXp += xpGained;
+      currentCoins += coinsGained;
+      if (isWin) {
+        wins++;
+        if (isArenaBreakerWin) abWins++;
+      } else {
+        losses++;
+        if (isArenaBreakerWin) abLosses++;
+      }
       final userData = snapshot.data()!;
       final user = UserModel.fromJson(userData);
 
@@ -125,7 +170,27 @@ class UserRepository {
         achievements.add('veteran');
       }
 
+      // Arena Breaker Achievements
+      if (isArenaBreakerWin && isWin && !achievements.contains('arena_breaker')) {
+        achievements.add('arena_breaker');
+      }
+      if (abWins >= 5 && !achievements.contains('clutch_master')) {
+        achievements.add('clutch_master');
+      }
+      if (abWins >= 10 && !achievements.contains('unbreakable')) {
+        achievements.add('unbreakable');
+      }
+
       transaction.update(userRef, {
+        'xp': currentXp,
+        'level': currentLevel,
+        'xpToNextLevel': xpToNext,
+        'coins': currentCoins,
+        'totalWins': wins,
+        'totalLosses': losses,
+        'arenaBreakerWins': abWins,
+        'arenaBreakerLosses': abLosses,
+        'rank': rank,
         'xp': totalXp,
         'level': newLevel,
         'coins': user.coins + coinsGained,

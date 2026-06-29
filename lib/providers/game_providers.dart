@@ -17,3 +17,11 @@ final gameRoomProvider = StreamProvider.family<GameRoomModel?, String>((ref, roo
   final repo = ref.watch(gameRepositoryProvider);
   return repo.watchRoom(roomId);
 });
+
+final activeMatchProvider = FutureProvider<GameRoomModel?>((ref) async {
+  final user = ref.watch(currentUserProvider).value;
+  if (user == null) return null;
+  
+  final repo = ref.watch(gameRepositoryProvider);
+  return repo.findActiveMatch(user.uid);
+});

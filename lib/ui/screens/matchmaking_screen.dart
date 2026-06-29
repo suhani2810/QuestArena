@@ -60,7 +60,7 @@ class MatchmakingScreen extends ConsumerWidget {
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           border: Border.all(
-                            color: AppColors.purple.withOpacity(0.1 * (4 - index)),
+                            color: AppColors.purple.withValues(alpha: 0.1 * (4 - index)),
                             width: 1,
                           ),
                         ),
@@ -86,7 +86,7 @@ class MatchmakingScreen extends ConsumerWidget {
                           gradient: SweepGradient(
                             colors: [
                               Colors.transparent,
-                              AppColors.purple.withOpacity(0.4),
+                              AppColors.purple.withValues(alpha: 0.4),
                               Colors.transparent,
                             ],
                             stops: const [0.0, 0.5, 1.0],
@@ -105,7 +105,7 @@ class MatchmakingScreen extends ConsumerWidget {
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: AppColors.purple.withOpacity(0.4),
+                            color: AppColors.purple.withValues(alpha: 0.4),
                             blurRadius: 25,
                             spreadRadius: 5,
                           ),
@@ -142,9 +142,9 @@ class MatchmakingScreen extends ConsumerWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                   decoration: BoxDecoration(
-                    color: AppColors.gold.withOpacity(0.1),
+                    color: AppColors.gold.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: AppColors.gold.withOpacity(0.3)),
+                    border: Border.all(color: AppColors.gold.withValues(alpha: 0.3)),
                   ),
                   child: Text(
                     'RANK: ${user?.rank.toUpperCase() ?? 'BRONZE'}',

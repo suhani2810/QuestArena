@@ -4,6 +4,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dio/dio.dart';
 import '../../core/constants/api_constants.dart';
+import '../../core/models/quiz_category.dart';
 import '../../core/utils/game_utils.dart';
 import '../models/game_room_model.dart';
 
@@ -14,13 +15,16 @@ class GameRepository {
   GameRepository(this._dio);
 
   // Create a private room
-  Future<String> createPrivateRoom(Map<String, dynamic> player1Data, String code) async {
+  Future<String> createPrivateRoom(
+    Map<String, dynamic> player1Data,
+    String code,
+    QuizCategory category,
+  ) async {
     final roomId = _db.collection('gameRooms').doc().id;
     
-    // Fetch questions from client side since Cloud Functions are not available on Spark plan
     List<Map<String, dynamic>> questions = [];
     try {
-      final response = await _dio.get(ApiConstants.triviaUrl);
+      final response = await _dio.get(ApiConstants.triviaUrlForCategory(category.id));
       questions = (response.data['results'] as List).map((q) => {
         'question': GameUtils.decodeHtmlEntities(q['question']),
         'correct_answer': GameUtils.decodeHtmlEntities(q['correct_answer']),
@@ -36,6 +40,8 @@ class GameRepository {
     await _db.collection('gameRooms').doc(roomId).set({
       'roomId': roomId,
       'roomCode': code,
+      'categoryId': category.id,
+      'categoryName': category.name,
       'status': 'waiting',
       'player1': {...player1Data, 'isReady': false, 'score': 0, 'answers': []},
       'player2': null,
@@ -47,7 +53,6 @@ class GameRepository {
 
   // Join a private room using a code
   Future<String?> joinPrivateRoom(Map<String, dynamic> player2Data, String code) async {
-    // Look for rooms with this code that are not already active/finished
     final query = await _db
         .collection('gameRooms')
         .where('roomCode', isEqualTo: code)
@@ -59,18 +64,16 @@ class GameRepository {
     final doc = query.docs.first;
     final status = doc.get('status');
 
-    // Only allow joining if it's in a 'waiting' or 'fetching_questions' state
     if (status != 'waiting' && status != 'fetching_questions') return null;
 
     await doc.reference.update({
       'player2': {...player2Data, 'isReady': false, 'score': 0, 'answers': []},
-      'status': 'active', // Room is now full
+      'status': 'active', 
     });
 
     return doc.id;
   }
 
-  // Watch a specific game room
   Stream<GameRoomModel?> watchRoom(String roomId) {
     return _db.collection('gameRooms').doc(roomId).snapshots().map((doc) {
       if (!doc.exists || doc.data() == null) return null;
@@ -78,14 +81,22 @@ class GameRepository {
     });
   }
 
-  // Set the player as "Ready"
-  Future<void> setPlayerReady(String roomId, int playerNumber) async {
+  Future<void> setPlayerReady(String roomId, int playerNumber, String userId) async {
     await _db.collection('gameRooms').doc(roomId).update({
       'player$playerNumber.isReady': true,
     });
   }
 
-  // Submit an answer
+  // Start the match for both
+  Future<void> startGame(String roomId) async {
+    await _db.collection('gameRooms').doc(roomId).update({
+      'status': 'active',
+      'questionStartedAt': FieldValue.serverTimestamp(),
+      'currentQuestionIndex': 0,
+    });
+  }
+
+  // Submit an answer (Independent progression)
   Future<void> submitAnswer({
     required String roomId,
     required String userId,
@@ -101,73 +112,226 @@ class GameRepository {
 
       final data = snapshot.data() as Map<String, dynamic>;
       final playerKey = 'player$playerNumber';
-      
-      final player1 = data['player1'] as Map<String, dynamic>;
-      final player2 = data['player2'] as Map<String, dynamic>?;
-
-      if (player2 == null) return; // Can't progress without both players
-
-      final currentP1Answers = List<String>.from(player1['answers'] ?? []);
-      final currentP2Answers = List<String>.from(player2['answers'] ?? []);
-      
       final currentIdx = data['currentQuestionIndex'] ?? 0;
       final questions = List<dynamic>.from(data['questions'] ?? []);
 
-      // 1. Update current player's answers and score
-      final updatedAnswers = playerNumber == 1 ? currentP1Answers : currentP2Answers;
+      // 1. Update player stats
+      final playerAnswers = List<String>.from(data[playerKey]['answers'] ?? []);
       
-      // Safety: Don't add more answers than there are questions or if already answered this index
-      if (updatedAnswers.length > currentIdx) return; 
+      // Auto-fill missed questions
+      while (playerAnswers.length < currentIdx) {
+        playerAnswers.add("TIMEOUT");
+      }
+      
+      if (playerAnswers.length == currentIdx) {
+        playerAnswers.add(answer);
+        final newScore = (data[playerKey]['score'] ?? 0) + scoreIncrement;
 
-      updatedAnswers.add(answer);
-      final oldScore = (playerNumber == 1 ? player1['score'] : player2['score']) ?? 0;
-      final newScore = oldScore + scoreIncrement;
+        transaction.update(roomRef, {
+          '$playerKey.answers': playerAnswers,
+          '$playerKey.score': newScore,
+        });
+      }
 
-      transaction.update(roomRef, {
-        '$playerKey.answers': updatedAnswers,
-        '$playerKey.score': newScore,
-      });
-
-      // 2. Check if we should move to the next question
-      final p1Len = playerNumber == 1 ? updatedAnswers.length : currentP1Answers.length;
-      final p2Len = playerNumber == 2 ? updatedAnswers.length : currentP2Answers.length;
+      // 2. Progression Check (Independent)
+      // Check if BOTH answered
+      final p1Len = playerNumber == 1 ? playerAnswers.length : (data['player1']['answers'] as List).length;
+      final p2Len = playerNumber == 2 ? playerAnswers.length : (data['player2']['answers'] as List).length;
 
       if (p1Len > currentIdx && p2Len > currentIdx) {
-        if (currentIdx + 1 < questions.length) {
-          transaction.update(roomRef, {'currentQuestionIndex': currentIdx + 1});
-        } else {
-          // Game Finished
-          final p1Score = playerNumber == 1 ? newScore : (player1['score'] ?? 0);
-          final p2Score = playerNumber == 2 ? newScore : (player2['score'] ?? 0);
-          
-          String winnerId = 'draw';
-          if (p1Score > p2Score) winnerId = player1['uid'];
-          if (p2Score > p1Score) winnerId = player2['uid'];
+        _advanceOrFinish(transaction, roomRef, data, currentIdx, questions);
+      }
+    });
+  }
 
+  // Force advance if timer expired (Independent driver)
+  Future<void> forceAdvanceQuestion(String roomId, int fromIndex) async {
+    final roomRef = _db.collection('gameRooms').doc(roomId);
+
+    await _db.runTransaction((transaction) async {
+      final snapshot = await transaction.get(roomRef);
+      if (!snapshot.exists) return;
+
+      final data = snapshot.data() as Map<String, dynamic>;
+      final currentIdx = data['currentQuestionIndex'] ?? 0;
+
+      // Only advance if we are still on the index that timed out
+      if (currentIdx == fromIndex) {
+        final questions = List<dynamic>.from(data['questions'] ?? []);
+        _advanceOrFinish(transaction, roomRef, data, currentIdx, questions);
+      }
+    });
+  }
+
+  void _advanceOrFinish(Transaction transaction, DocumentReference roomRef, Map<String, dynamic> data, int currentIdx, List<dynamic> questions) {
+    if (currentIdx + 1 < questions.length) {
+      transaction.update(roomRef, {
+        'currentQuestionIndex': currentIdx + 1,
+        'questionStartedAt': FieldValue.serverTimestamp(),
+      });
+    } else {
+      // Finish Logic
+      final p1 = data['player1'];
+      final p2 = data['player2'];
+      final p1Score = p1['score'] ?? 0;
+      final p2Score = p2['score'] ?? 0;
+
+      if (p1Score == p2Score) {
+        transaction.update(roomRef, {
+          'status': 'arena_breaker',
+          'isArenaBreaker': true,
+          'questionStartedAt': FieldValue.serverTimestamp(),
+        });
+        _fetchArenaBreakerQuestion(roomRef.id);
+      } else {
+        transaction.update(roomRef, {
+          'status': 'finished',
+          'winnerId': p1Score > p2Score ? p1['uid'] : p2['uid'],
+        });
+      }
+    }
+  }
+
+  // --- ARENA BREAKER LOGIC ---
+  Future<void> _fetchArenaBreakerQuestion(String roomId) async {
+    try {
+      final response = await _dio.get(ApiConstants.triviaUrl, queryParameters: {'amount': 1});
+      final q = (response.data['results'] as List).first;
+      final questionMap = {
+        'question': GameUtils.decodeHtmlEntities(q['question']),
+        'correct_answer': GameUtils.decodeHtmlEntities(q['correct_answer']),
+        'incorrect_answers': (q['incorrect_answers'] as List).map((a) => GameUtils.decodeHtmlEntities(a)).toList(),
+      };
+
+      await _db.collection('gameRooms').doc(roomId).update({
+        'arenaBreakerQuestion': questionMap,
+        'arenaBreakerSubmissions': {},
+        'questionStartedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      await _db.collection('gameRooms').doc(roomId).update({
+        'arenaBreakerQuestion': GameUtils.getFallbackQuestions().first,
+        'arenaBreakerSubmissions': {},
+        'questionStartedAt': FieldValue.serverTimestamp(),
+      });
+    }
+  }
+
+  Future<void> submitArenaBreakerAnswer({
+    required String roomId,
+    required String userId,
+    required String answer,
+  }) async {
+    final roomRef = _db.collection('gameRooms').doc(roomId);
+
+    await _db.runTransaction((transaction) async {
+      final snapshot = await transaction.get(roomRef);
+      if (!snapshot.exists) return;
+
+      final data = snapshot.data() as Map<String, dynamic>;
+      final question = data['arenaBreakerQuestion'];
+      if (question == null) return;
+
+      final submissions = Map<String, dynamic>.from(data['arenaBreakerSubmissions'] ?? {});
+      if (submissions.containsKey(userId)) return;
+
+      final isCorrect = answer == question['correct_answer'];
+      submissions[userId] = {
+        'answer': answer,
+        'isCorrect': isCorrect,
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+      };
+
+      transaction.update(roomRef, {'arenaBreakerSubmissions': submissions});
+
+      if (submissions.length == 2 || isCorrect) {
+        final p1 = data['player1'];
+        final p2 = data['player2'];
+        final s1 = submissions[p1['uid']];
+        final s2 = submissions[p2['uid']];
+
+        String? winnerId;
+        if (s1 != null && s1['isCorrect'] && (s2 == null || !s2['isCorrect'])) winnerId = p1['uid'];
+        else if (s2 != null && s2['isCorrect'] && (s1 == null || !s1['isCorrect'])) winnerId = p2['uid'];
+        else if (s1 != null && s2 != null && s1['isCorrect'] && s2['isCorrect']) {
+          winnerId = (s1['timestamp'] < s2['timestamp']) ? p1['uid'] : p2['uid'];
+        } else if (submissions.length == 2) {
+          // Both wrong -> Next round
+          _scheduleNextABRound(roomId);
+          return;
+        }
+
+        if (winnerId != null) {
           transaction.update(roomRef, {
             'status': 'finished',
             'winnerId': winnerId,
+            'isArenaBreakerWin': true,
           });
         }
       }
     });
   }
 
-  // Emergency Fallback: If Cloud Function fails, the client will push mock questions
-  Future<void> triggerQuestionsFallback(String roomId) async {
+  void _scheduleNextABRound(String roomId) {
+    Future.delayed(const Duration(seconds: 3), () => _fetchArenaBreakerQuestion(roomId));
+  }
+
+  Future<void> updatePresence(String roomId, String userId, bool isOnline) async {
     await _db.collection('gameRooms').doc(roomId).update({
-      'questions': GameUtils.getFallbackQuestions(),
-      'status': 'waiting',
+      'presence.$userId': {
+        'isOnline': isOnline,
+        'lastSeen': FieldValue.serverTimestamp(),
+      },
     });
   }
 
-  // Claim match rewards
+  Future<void> handleForfeit(String roomId, String winnerId) async {
+    await _db.collection('gameRooms').doc(roomId).update({
+      'status': 'finished',
+      'winnerId': winnerId,
+      'forfeitWinnerId': winnerId,
+    });
+  }
+
+  Future<void> leaveMatch(String roomId, String userId, String opponentId) async {
+    await _db.collection('gameRooms').doc(roomId).update({
+      'status': 'finished',
+      'winnerId': opponentId,
+      'forfeitWinnerId': opponentId,
+    });
+  }
+
+  Future<GameRoomModel?> findActiveMatch(String uid) async {
+    final tenMinAgo = DateTime.now().subtract(const Duration(minutes: 10));
+    final query = await _db.collection('gameRooms')
+        .where('status', whereIn: ['active', 'arena_breaker'])
+        .where('createdAt', isGreaterThan: Timestamp.fromDate(tenMinAgo))
+        .get();
+
+    for (var doc in query.docs) {
+      final data = doc.data();
+      if (data['player1']['uid'] == uid || data['player2']?['uid'] == uid) {
+        return GameRoomModel.fromJson(data);
+      }
+    }
+    return null;
+  }
+
+  Future<void> triggerQuestionsFallback(String roomId) async {
+    await _db.collection('gameRooms').doc(roomId).update({
+      'questions': GameUtils.getFallbackQuestions(),
+      'status': 'active',
+      'questionStartedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
   Future<void> claimRewards(String roomId, String userId, bool isWin) async {
     final roomRef = _db.collection('gameRooms').doc(roomId);
-    
     await _db.runTransaction((transaction) async {
       final snapshot = await transaction.get(roomRef);
       if (!snapshot.exists) return;
+      final claimed = List<String>.from(snapshot.get('claimedRewards') ?? []);
+      if (claimed.contains(userId)) return;
 
       final data = snapshot.data() as Map<String, dynamic>?;
       final claimed = List<String>.from(data?['claimedRewards'] ?? []);
@@ -176,5 +340,56 @@ class GameRepository {
       claimed.add(userId);
       transaction.update(roomRef, {'claimedRewards': claimed});
     });
+  }
+
+  Future<void> requestRematch(String roomId, String userId) async {
+    await _db.collection('gameRooms').doc(roomId).update({
+      'rematchRequests': FieldValue.arrayUnion([userId]),
+    });
+  }
+
+  Future<void> createRematchGame({
+    required String oldRoomId,
+    required Map<String, dynamic> player1,
+    required Map<String, dynamic> player2,
+    required int? categoryId,
+    required String categoryName,
+  }) async {
+    final newRoomId = _db.collection('gameRooms').doc().id;
+    List<Map<String, dynamic>> questions = [];
+    try {
+      final response = await _dio.get(ApiConstants.triviaUrlForCategory(categoryId));
+      questions = (response.data['results'] as List).map((q) => {
+        'question': GameUtils.decodeHtmlEntities(q['question']),
+        'correct_answer': GameUtils.decodeHtmlEntities(q['correct_answer']),
+        'incorrect_answers': (q['incorrect_answers'] as List).map((a) => GameUtils.decodeHtmlEntities(a)).toList(),
+      }).toList();
+    } catch (e) {
+      questions = GameUtils.getFallbackQuestions();
+    }
+
+    Map<String, dynamic> resetPlayer(Map<String, dynamic> p) {
+      final newP = Map<String, dynamic>.from(p);
+      newP['score'] = 0;
+      newP['answers'] = [];
+      newP['isReady'] = false;
+      return newP;
+    }
+
+    final batch = _db.batch();
+    batch.set(_db.collection('gameRooms').doc(newRoomId), {
+      'roomId': newRoomId,
+      'roomCode': '',
+      'categoryId': categoryId,
+      'categoryName': categoryName,
+      'status': 'active',
+      'player1': resetPlayer(player1),
+      'player2': resetPlayer(player2),
+      'createdAt': FieldValue.serverTimestamp(),
+      'questions': questions,
+      'questionStartedAt': FieldValue.serverTimestamp(),
+    });
+    batch.update(_db.collection('gameRooms').doc(oldRoomId), {'nextMatchId': newRoomId});
+    await batch.commit();
   }
 }

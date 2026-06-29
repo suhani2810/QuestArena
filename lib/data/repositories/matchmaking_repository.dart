@@ -30,10 +30,17 @@ class MatchmakingRepository {
         .where('status', isEqualTo: 'searching')
         .get();
 
-    // Filter out our own ticket in Dart to avoid complex Firestore index requirements
-    final matchDoc = potentialMatches.docs
-        .where((doc) => doc.id != ticket.uid)
-        .firstOrNull;
+    // Filter in Dart to avoid requiring a Firestore composite index for category matching.
+    QueryDocumentSnapshot<Map<String, dynamic>>? matchDoc;
+    for (final doc in potentialMatches.docs) {
+      if (doc.id == ticket.uid) continue;
+
+      final data = doc.data();
+      if (data['categoryId'] == ticket.categoryId) {
+        matchDoc = doc;
+        break;
+      }
+    }
 
     if (matchDoc != null) {
       final opponentUid = matchDoc.id;
@@ -47,7 +54,9 @@ class MatchmakingRepository {
       // Fetch questions from client side since Cloud Functions are not available on Spark plan
       List<Map<String, dynamic>> questions = [];
       try {
-        final response = await _dio.get(ApiConstants.triviaUrl);
+        final response = await _dio.get(
+          ApiConstants.triviaUrlForCategory(ticket.categoryId),
+        );
         questions = (response.data['results'] as List).map((q) => {
           'question': GameUtils.decodeHtmlEntities(q['question']),
           'correct_answer': GameUtils.decodeHtmlEntities(q['correct_answer']),
@@ -63,6 +72,8 @@ class MatchmakingRepository {
       await _db.collection('gameRooms').doc(roomId).set({
         'roomId': roomId,
         'roomCode': '', // Not needed for public matchmaking
+        'categoryId': ticket.categoryId,
+        'categoryName': ticket.categoryName,
         'status': 'waiting',
         'player1': {...player1Data, 'isReady': false, 'score': 0, 'answers': []},
         'player2': {...player2Data, 'isReady': false, 'score': 0, 'answers': []},
