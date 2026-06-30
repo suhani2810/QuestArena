@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../providers/user_providers.dart';
-import '../../../data/models/user_model.dart';
 
 class EditProfileScreen extends ConsumerStatefulWidget {
   const EditProfileScreen({super.key});
@@ -104,19 +103,9 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: () async {
-                  final updatedUser = UserModel(
-                    uid: user.uid,
+                  final updatedUser = user.copyWith(
                     username: _usernameController.text.trim(),
-                    email: user.email,
                     avatarUrl: selectedAvatar,
-                    level: user.level,
-                    xp: user.xp,
-                    xpToNextLevel: user.xpToNextLevel,
-                    coins: user.coins,
-                    totalWins: user.totalWins,
-                    totalLosses: user.totalLosses,
-                    rank: user.rank,
-                    achievements: user.achievements,
                   );
 
                   await ref
@@ -125,7 +114,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
 
                   ref.invalidate(currentUserProvider);
 
-                  if (mounted) {
+                  if (context.mounted) {
                     Navigator.pop(context);
                   }
                 },

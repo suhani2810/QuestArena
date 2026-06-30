@@ -11,7 +11,6 @@ import '../services/firestore_service.dart';
 import '../services/xp_service.dart';
 import '../services/rank_service.dart';
 import '../../core/utils/level_system.dart';
-import '../../core/utils/rank_system.dart';
 
 class UserRepository {
   final FirestoreService _service;
@@ -91,13 +90,11 @@ class UserRepository {
   Future<MatchEndResult?> processMatchEnd({
     required String uid,
     required bool isWin,
-    bool isArenaBreakerWin = false,
-  }) async {
-    final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
     required bool isDraw,
     required int correctAnswers,
     required int totalQuestions,
     required int coinsGained,
+    bool isArenaBreakerWin = false,
   }) async {
     final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
     MatchEndResult? result;
@@ -106,25 +103,6 @@ class UserRepository {
       final snapshot = await transaction.get(userRef);
       if (!snapshot.exists) return;
 
-      final data = snapshot.data()!;
-      int currentXp = data['xp'] ?? 0;
-      int currentLevel = data['level'] ?? 1;
-      int currentCoins = data['coins'] ?? 0;
-      int wins = data['totalWins'] ?? 0;
-      int losses = data['totalLosses'] ?? 0;
-      int abWins = data['arenaBreakerWins'] ?? 0;
-      int abLosses = data['arenaBreakerLosses'] ?? 0;
-
-      // Update XP and Coins
-      currentXp += xpGained;
-      currentCoins += coinsGained;
-      if (isWin) {
-        wins++;
-        if (isArenaBreakerWin) abWins++;
-      } else {
-        losses++;
-        if (isArenaBreakerWin) abLosses++;
-      }
       final userData = snapshot.data()!;
       final user = UserModel.fromJson(userData);
 
@@ -161,7 +139,7 @@ class UserRepository {
           ? DateTime.now() 
           : user.lastDailyBonusDate;
 
-      // Achievements Logic (Keeping original logic)
+      // Achievements Logic
       final achievements = List<String>.from(userData['achievements'] ?? []);
       if (isWin && !achievements.contains('first_win')) {
         achievements.add('first_win');
@@ -170,9 +148,15 @@ class UserRepository {
         achievements.add('veteran');
       }
 
-      // Arena Breaker Achievements
-      if (isArenaBreakerWin && isWin && !achievements.contains('arena_breaker')) {
-        achievements.add('arena_breaker');
+      int abWins = user.arenaBreakerWins;
+      int abLosses = user.arenaBreakerLosses;
+      if (isArenaBreakerWin) {
+        if (isWin) {
+          abWins++;
+          if (!achievements.contains('arena_breaker')) achievements.add('arena_breaker');
+        } else {
+          abLosses++;
+        }
       }
       if (abWins >= 5 && !achievements.contains('clutch_master')) {
         achievements.add('clutch_master');
@@ -182,15 +166,6 @@ class UserRepository {
       }
 
       transaction.update(userRef, {
-        'xp': currentXp,
-        'level': currentLevel,
-        'xpToNextLevel': xpToNext,
-        'coins': currentCoins,
-        'totalWins': wins,
-        'totalLosses': losses,
-        'arenaBreakerWins': abWins,
-        'arenaBreakerLosses': abLosses,
-        'rank': rank,
         'xp': totalXp,
         'level': newLevel,
         'coins': user.coins + coinsGained,
@@ -205,6 +180,8 @@ class UserRepository {
         'subRank': rankUpdate.newSubRank,
         'rankPoints': rankUpdate.newPoints,
         'achievements': achievements,
+        'arenaBreakerWins': abWins,
+        'arenaBreakerLosses': abLosses,
       });
 
       result = MatchEndResult(
@@ -222,15 +199,17 @@ class UserRepository {
     required int xpGained,
     required int coinsGained,
     required bool isWin,
+    bool isArenaBreakerWin = false,
   }) async {
     // Forwarding to processMatchEnd with defaults for backward compatibility
     await processMatchEnd(
       uid: uid,
       isWin: isWin,
-      isDraw: false, // Assume not a draw for old calls
+      isDraw: false,
       correctAnswers: 0,
       totalQuestions: 0,
       coinsGained: coinsGained,
+      isArenaBreakerWin: isArenaBreakerWin,
     );
   }
 

@@ -20,8 +20,7 @@ import '../../data/models/match_history_model.dart';
 import 'game_screen.dart';
 import '../../data/models/match_end_result.dart';
 import '../../core/utils/level_system.dart';
-import '../../core/utils/rank_system.dart';
-import '../widgets/xp_progress_bar.dart';
+import '../../data/services/rank_service.dart';
 import '../widgets/xp_summary_card.dart';
 import '../widgets/rank_badge.dart';
 import '../widgets/rank_progress_bar.dart';
@@ -78,7 +77,6 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
       final currentUser = userValue.value;
       
       if (currentUser == null) {
-        // If data is still loading or null, wait and retry a few times
         debugPrint('Current user is null, retrying reward claim...');
         await Future.delayed(const Duration(seconds: 1));
         if (mounted) _handleRewards();
@@ -105,6 +103,7 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
         correctAnswers: correctAnswers,
         totalQuestions: totalQuestions,
         coinsGained: isWinner ? 20 : 5,
+        isArenaBreakerWin: widget.room.isArenaBreakerWin,
       );
 
       final opponentScore = currentUser.uid == widget.room.player1['uid'] 
@@ -125,14 +124,6 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
         playedAt: DateTime.now(),
       );
 
-      await Future.wait([
-        ref.read(userRepositoryProvider).updateUserStats(
-          uid: currentUser.uid,
-          xpGained: isWinner ? 50 : 15,
-          coinsGained: isWinner ? 20 : 5,
-          isWin: isWinner,
-          isArenaBreakerWin: widget.room.isArenaBreakerWin,
-        ),
       // 2. Mark rewards as claimed and save history
       await Future.wait([
         ref.read(gameRepositoryProvider).claimRewards(
@@ -141,7 +132,6 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
           isWinner,
         ),
         ref.read(userRepositoryProvider).saveMatchHistory(currentUser.uid, history),
-      ]);
       ]).timeout(const Duration(seconds: 10));
       
       if (mounted) {
@@ -157,9 +147,6 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
       debugPrint('Error claiming rewards: $e');
       if (mounted) {
         setState(() => _rewardsClaimed = true);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Rewards saved, but some data might be delayed.')),
-        );
       }
     }
   }
@@ -263,8 +250,7 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
                         ? 'PRACTICE COMPLETE' 
                         : (isDraw ? "IT'S A DRAW!" : (widget.room.forfeitWinnerId != null ? 'MATCH FORFEITED' : (widget.room.isArenaBreakerWin ? 'WINNER BY ARENA BREAKER ⚡' : (isWinner ? 'VICTORY!' : 'DEFEAT')))),
                     style: AppTextStyles.display.copyWith(
-                      fontSize: (widget.room.isArenaBreakerWin || widget.room.forfeitWinnerId != null || widget.isPractice) ? 24 : 36,
-                      fontSize: 32,
+                      fontSize: (widget.room.isArenaBreakerWin || widget.room.forfeitWinnerId != null || widget.isPractice) ? 24 : 32,
                       color: isWinner ? AppColors.teal : AppColors.red,
                     ),
                     textAlign: TextAlign.center,
@@ -272,46 +258,22 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
 
                   const SizedBox(height: 24),
 
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: AppColors.cardBg,
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: AppColors.surface),
-                    ),
-                    child: Column(
-                      children: [
-                        _ResultRow(label: 'YOUR SCORE', value: '$myScore', color: AppColors.gold),
-                        const Divider(color: AppColors.surface, height: 24),
-                        _ResultRow(label: widget.isPractice ? 'AI BOT' : 'OPPONENT', value: '$opponentScore', color: AppColors.textSecondary),
-                      ],
-                    ),
-                  ).animate().fadeIn(delay: 400.ms),
+                  _buildScoreCard(myScore, opponentScore),
 
                   const SizedBox(height: 24),
 
-                  if (widget.isPractice)
-                    Text('No rewards earned in Practice Mode', style: AppTextStyles.label.copyWith(color: AppColors.textMuted))
-                  else
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        _RewardItem(
-                          label: 'XP GAINED', 
-                          value: isWinner ? '+50' : '+15', 
-                          icon: Icons.trending_up_rounded, 
-                          color: AppColors.purple,
-                          isProcessing: !_rewardsClaimed,
-                        ),
-                        _RewardItem(
-                          label: 'COINS', 
-                          value: isWinner ? '+20' : '+5', 
-                          icon: Icons.monetization_on_rounded, 
-                          color: AppColors.gold,
-                          isProcessing: !_rewardsClaimed,
-                        ),
-                      ],
-                    ).animate().fadeIn(delay: 600.ms),
+                  if (!widget.isPractice && _matchResult != null) ...[
+                    XpSummaryCard(rewards: _matchResult!.xpRewards)
+                        .animate()
+                        .fadeIn(delay: 400.ms),
+                    
+                    const SizedBox(height: 24),
+                    
+                    _buildRankSection(_matchResult!.rankUpdate)
+                        .animate()
+                        .fadeIn(delay: 600.ms),
+                  ] else if (widget.isPractice)
+                    Text('No rewards earned in Practice Mode', style: AppTextStyles.label.copyWith(color: AppColors.textMuted)),
 
                   const SizedBox(height: 40),
 
@@ -319,13 +281,13 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
                     Column(
                       children: [
                         ElevatedButton(
-                          onPressed: () => Navigator.of(context).pop(), // Will go back to Setup
+                          onPressed: () => Navigator.of(context).pop(),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.purple,
                             minimumSize: const Size(double.infinity, 56),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                           ),
-                          child: const Text('CHANGE SETUP', style: TextStyle(fontWeight: FontWeight.bold)),
+                          child: const Text('CHANGE SETUP', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                         ),
                         const SizedBox(height: 12),
                         TextButton(
@@ -335,7 +297,6 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
                       ],
                     )
                   else ...[
-                    // REMATCH SECTION
                     if (_rematchTimer > 0 && roomState.nextMatchId == null) ...[
                       if (waitingForOpponent)
                         Column(
@@ -348,8 +309,8 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
                       else
                         ElevatedButton.icon(
                           onPressed: _onRematchPressed,
-                          icon: const Icon(Icons.refresh_rounded),
-                          label: Text(otherRequested ? 'ACCEPT REMATCH' : 'REQUEST REMATCH'),
+                          icon: const Icon(Icons.refresh_rounded, color: Colors.white),
+                          label: Text(otherRequested ? 'ACCEPT REMATCH' : 'REQUEST REMATCH', style: const TextStyle(color: Colors.white)),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: otherRequested ? AppColors.teal : AppColors.surface,
                             minimumSize: const Size(double.infinity, 56),
@@ -363,33 +324,14 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
 
                     const SizedBox(height: 16),
 
-                    TextButton(
+                    ElevatedButton(
                       onPressed: !_rewardsClaimed ? null : () => Navigator.of(context).popUntil((route) => route.isFirst),
-                      child: Text('BACK TO HOME', style: AppTextStyles.label.copyWith(color: AppColors.textMuted)),
-                  _buildScoreCard(myScore, opponentScore),
-
-                  const SizedBox(height: 24),
-
-                  if (_matchResult != null) ...[
-                    XpSummaryCard(rewards: _matchResult!.xpRewards)
-                        .animate()
-                        .fadeIn(delay: 400.ms),
-                    
-                    const SizedBox(height: 24),
-                    
-                    _buildRankSection(_matchResult!.rankUpdate)
-                        .animate()
-                        .fadeIn(delay: 600.ms),
-                  ],
-
-                  const SizedBox(height: 40),
-
-                  ElevatedButton(
-                    onPressed: !_rewardsClaimed ? null : () => Navigator.of(context).popUntil((route) => route.isFirst),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.purple,
-                      minimumSize: const Size(double.infinity, 56),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.cardBg,
+                        minimumSize: const Size(double.infinity, 56),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: AppColors.surface)),
+                      ),
+                      child: const Text('BACK TO HOME', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                     ),
                   ],
                 ],
@@ -434,13 +376,13 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
         children: [
           _ResultRow(label: 'YOUR SCORE', value: '$myScore', color: AppColors.gold),
           const Divider(color: AppColors.surface, height: 24),
-          _ResultRow(label: 'OPPONENT', value: '$opponentScore', color: AppColors.textSecondary),
+          _ResultRow(label: widget.isPractice ? 'AI BOT' : 'OPPONENT', value: '$opponentScore', color: AppColors.textSecondary),
         ],
       ),
     ).animate().fadeIn(delay: 200.ms);
   }
 
-  Widget _buildRankSection(rankUpdate) {
+  Widget _buildRankSection(RankUpdateResult rankUpdate) {
     final pointsDiff = rankUpdate.pointsGained;
     final pointsColor = pointsDiff >= 0 ? AppColors.teal : AppColors.red;
     final pointsText = pointsDiff >= 0 ? '+$pointsDiff RP' : '$pointsDiff RP';
