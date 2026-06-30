@@ -8,6 +8,7 @@ class LeaderboardModel {
   final int level;
   final int xp;
   final String rank;
+  final int? subRank;
 
   LeaderboardModel({
     required this.uid,
@@ -16,6 +17,7 @@ class LeaderboardModel {
     required this.level,
     required this.xp,
     required this.rank,
+    this.subRank,
   });
 
   factory LeaderboardModel.fromJson(Map<String, dynamic> json) {
@@ -25,7 +27,8 @@ class LeaderboardModel {
       avatarUrl: json['avatarUrl'],
       level: json['level'] ?? 1,
       xp: json['xp'] ?? 0,
-      rank: json['rank'] ?? 'Bronze',
+      rank: json['rank'] ?? 'Unranked',
+      subRank: json['subRank'],
     );
   }
 
@@ -36,5 +39,6 @@ class LeaderboardModel {
     'level': level,
     'xp': xp,
     'rank': rank,
+    'subRank': subRank,
   };
 }

@@ -280,21 +280,22 @@ class _GameScreenState extends ConsumerState<GameScreen>
     final question = room.questions[room.currentQuestionIndex];
 
     return SafeArea(
-      child: Padding(
+      child: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
         padding: const EdgeInsets.all(24.0),
         child: Column(
           children: [
             _buildHeader(room),
-            const SizedBox(height: 40),
+            const SizedBox(height: 32),
             _buildTimerBar(),
-            const SizedBox(height: 40),
+            const SizedBox(height: 32),
             _buildPowerups(room),
             const SizedBox(height: 24),
             Text(GameUtils.decodeHtmlEntities(question['question']), 
                 style: AppTextStyles.headline, textAlign: TextAlign.center)
                 .animate(key: ValueKey(room.currentQuestionIndex))
                 .fadeIn(),
-            const SizedBox(height: 40),
+            const SizedBox(height: 32),
             ..._shuffledOptions
                 .where((opt) => !_fiftyFiftyHiddenOptions.contains(opt))
                 .map((opt) => Padding(

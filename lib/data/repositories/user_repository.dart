@@ -6,7 +6,12 @@ import '../../core/errors/app_error.dart';
 import '../../core/errors/result.dart';
 import '../models/user_model.dart';
 import '../models/match_history_model.dart';
+import '../models/match_end_result.dart';
 import '../services/firestore_service.dart';
+import '../services/xp_service.dart';
+import '../services/rank_service.dart';
+import '../../core/utils/level_system.dart';
+import '../../core/utils/rank_system.dart';
 
 class UserRepository {
   final FirestoreService _service;
@@ -82,14 +87,20 @@ class UserRepository {
     await FirebaseFirestore.instance.collection('users').doc(uid).delete();
   }
 
-  Future<void> updateUserStats({
+  /// Processes match rewards and updates user stats transactionally.
+  Future<MatchEndResult?> processMatchEnd({
     required String uid,
-    required int xpGained,
-    required int coinsGained,
     required bool isWin,
     bool isArenaBreakerWin = false,
   }) async {
     final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
+    required bool isDraw,
+    required int correctAnswers,
+    required int totalQuestions,
+    required int coinsGained,
+  }) async {
+    final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
+    MatchEndResult? result;
 
     await FirebaseFirestore.instance.runTransaction((transaction) async {
       final snapshot = await transaction.get(userRef);
@@ -114,29 +125,44 @@ class UserRepository {
         losses++;
         if (isArenaBreakerWin) abLosses++;
       }
+      final userData = snapshot.data()!;
+      final user = UserModel.fromJson(userData);
 
-      // Check for Level Up
-      int xpToNext = 100 * currentLevel;
-      while (currentXp >= xpToNext) {
-        currentXp -= xpToNext;
-        currentLevel++;
-        xpToNext = 100 * currentLevel;
-      }
+      final xpRewards = XpService.calculateMatchRewards(
+        user: user,
+        isWin: isWin,
+        isDraw: isDraw,
+        correctAnswers: correctAnswers,
+        totalQuestions: totalQuestions,
+      );
 
-      // Calculate Rank
-      String rank = 'Bronze';
-      if (currentXp + (currentLevel * 1000) >= 10000) {
-        rank = 'Diamond';
-      } else if (currentXp + (currentLevel * 1000) >= 4000) {
-        rank = 'Platinum';
-      } else if (currentXp + (currentLevel * 1000) >= 1500) {
-        rank = 'Gold';
-      } else if (currentXp + (currentLevel * 1000) >= 500) {
-        rank = 'Silver';
-      }
+      final wrongAnswers = totalQuestions - correctAnswers;
+      final rankUpdate = RankService.calculateRankUpdate(
+        user: user,
+        correctAnswers: correctAnswers,
+        wrongAnswers: wrongAnswers,
+      );
 
-      // Achievements Logic
-      final achievements = List<String>.from(data['achievements'] ?? []);
+      final xpGained = xpRewards.total;
+      final totalXp = user.xp + xpGained;
+      final newLevel = LevelSystem.getCurrentLevel(totalXp);
+      
+      final wins = user.wins + (isWin ? 1 : 0);
+      final losses = user.losses + (!isWin && !isDraw ? 1 : 0);
+      final draws = user.draws + (isDraw ? 1 : 0);
+      final matchesPlayed = user.matchesPlayed + 1;
+      
+      final currentWinStreak = isWin ? user.currentWinStreak + 1 : 0;
+      final highestWinStreak = currentWinStreak > user.highestWinStreak 
+          ? currentWinStreak 
+          : user.highestWinStreak;
+
+      final lastDailyBonusDate = xpRewards.dailyBonusXp > 0 
+          ? DateTime.now() 
+          : user.lastDailyBonusDate;
+
+      // Achievements Logic (Keeping original logic)
+      final achievements = List<String>.from(userData['achievements'] ?? []);
       if (isWin && !achievements.contains('first_win')) {
         achievements.add('first_win');
       }
@@ -165,9 +191,47 @@ class UserRepository {
         'arenaBreakerWins': abWins,
         'arenaBreakerLosses': abLosses,
         'rank': rank,
+        'xp': totalXp,
+        'level': newLevel,
+        'coins': user.coins + coinsGained,
+        'wins': wins,
+        'losses': losses,
+        'draws': draws,
+        'matchesPlayed': matchesPlayed,
+        'currentWinStreak': currentWinStreak,
+        'highestWinStreak': highestWinStreak,
+        'lastDailyBonusDate': lastDailyBonusDate != null ? Timestamp.fromDate(lastDailyBonusDate) : null,
+        'rank': rankUpdate.newRank,
+        'subRank': rankUpdate.newSubRank,
+        'rankPoints': rankUpdate.newPoints,
         'achievements': achievements,
       });
+
+      result = MatchEndResult(
+        xpRewards: xpRewards,
+        rankUpdate: rankUpdate,
+      );
     });
+
+    return result;
+  }
+
+  // Deprecated: use processMatchEnd instead
+  Future<void> updateUserStats({
+    required String uid,
+    required int xpGained,
+    required int coinsGained,
+    required bool isWin,
+  }) async {
+    // Forwarding to processMatchEnd with defaults for backward compatibility
+    await processMatchEnd(
+      uid: uid,
+      isWin: isWin,
+      isDraw: false, // Assume not a draw for old calls
+      correctAnswers: 0,
+      totalQuestions: 0,
+      coinsGained: coinsGained,
+    );
   }
 
   Future<void> saveMatchHistory(String uid, MatchHistoryModel history) async {

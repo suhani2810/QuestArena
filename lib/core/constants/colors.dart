@@ -33,4 +33,6 @@ class AppColors {
   static const Color rankGold = Color(0xFFF5C842);
   static const Color rankPlatinum = Color(0xFFE5E4E2);
   static const Color rankDiamond = Color(0xFF00BFFF);
+  static const Color rankMaster = Color(0xFF9D50BB);
+  static const Color rankChampion = Color(0xFFE91E63);
 }

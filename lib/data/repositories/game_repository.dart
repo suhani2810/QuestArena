@@ -332,6 +332,11 @@ class GameRepository {
       if (!snapshot.exists) return;
       final claimed = List<String>.from(snapshot.get('claimedRewards') ?? []);
       if (claimed.contains(userId)) return;
+
+      final data = snapshot.data() as Map<String, dynamic>?;
+      final claimed = List<String>.from(data?['claimedRewards'] ?? []);
+      if (claimed.contains(userId)) return; // Already claimed
+
       claimed.add(userId);
       transaction.update(roomRef, {'claimedRewards': claimed});
     });
