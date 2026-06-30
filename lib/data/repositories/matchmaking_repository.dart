@@ -3,10 +3,10 @@
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import '../../core/constants/api_constants.dart';
 import '../../core/utils/game_utils.dart';
 import '../models/matchmaking_model.dart';
-import '../services/firestore_service.dart';
 
 class MatchmakingRepository {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -65,7 +65,7 @@ class MatchmakingRepository {
               .toList(),
         }).toList();
       } catch (e) {
-        print("Trivia API Error: $e");
+        debugPrint("Trivia API Error: $e");
         questions = GameUtils.getFallbackQuestions();
       }
 

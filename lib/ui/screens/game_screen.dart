@@ -590,11 +590,10 @@ class _AnswerButton extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           color: isCorrect 
-              ? AppColors.teal.withValues(alpha: 0.1) 
+              ? Colors.teal.withValues(alpha: 0.1) 
               : isWrong 
-                  ? AppColors.red.withValues(alpha: 0.1)
+                  ? Colors.red.withValues(alpha: 0.1)
                   : AppColors.cardBg,
-          color: isCorrect ? Colors.teal.withValues(alpha: 0.1) : (isWrong ? Colors.red.withValues(alpha: 0.1) : AppColors.cardBg),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: isCorrect ? Colors.teal : (isWrong ? Colors.red : (isSelected ? AppColors.purple : AppColors.surface)), width: 2),
         ),

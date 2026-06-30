@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../core/theme/app_theme.dart';
+import '../../core/constants/colors.dart';
 
 // ─── Battle Hub Screen ────────────────────────────────────────────────────────
 // Redesigned version of the battle_screen / battle hub

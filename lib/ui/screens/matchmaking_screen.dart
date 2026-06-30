@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import '../../core/constants/colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../providers/matchmaking_providers.dart';
 import '../../providers/user_providers.dart';
@@ -60,8 +61,7 @@ class MatchmakingScreen extends ConsumerWidget {
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           border: Border.all(
-                            color: AppColors.neonViolet.withOpacity(0.1 * (4 - index)),
-                            color: AppColors.purple.withValues(alpha: 0.1 * (4 - index)),
+                            color: AppColors.neonViolet.withValues(alpha: 0.1 * (4 - index)),
                             width: 1,
                           ),
                         ),
@@ -87,8 +87,7 @@ class MatchmakingScreen extends ConsumerWidget {
                           gradient: SweepGradient(
                             colors: [
                               Colors.transparent,
-                              AppColors.neonViolet.withOpacity(0.4),
-                              AppColors.purple.withValues(alpha: 0.4),
+                              AppColors.neonViolet.withValues(alpha: 0.4),
                               Colors.transparent,
                             ],
                             stops: const [0.0, 0.5, 1.0],
@@ -108,39 +107,11 @@ class MatchmakingScreen extends ConsumerWidget {
                         );
                         return CharacterAvatar(
                           character: character,
-                          size: 100,
+                          size: 110,
                           showGlow: true,
                           showBorder: true,
                         );
                       }),
-                    Container(
-                      width: 100,
-                      height: 100,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.purple.withValues(alpha: 0.4),
-                            blurRadius: 25,
-                            spreadRadius: 5,
-                          ),
-                        ],
-                      ),
-                      child: CircleAvatar(
-                        radius: 50,
-                        backgroundColor: AppColors.surface,
-                        child: ClipOval(
-                          child: CachedNetworkImage(
-                            imageUrl: user?.avatarUrl ?? '',
-                            width: 100,
-                            height: 100,
-                            fit: BoxFit.cover,
-                            placeholder: (context, url) => const CircularProgressIndicator(color: AppColors.purple),
-                            errorWidget: (context, url, error) => const Icon(Icons.person, size: 50, color: Colors.white),
-                          ),
-                        ),
-                      ),
-                    ),
                   ],
                 ),
                 
@@ -157,12 +128,9 @@ class MatchmakingScreen extends ConsumerWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                   decoration: BoxDecoration(
-                    color: AppColors.neonAmber.withOpacity(0.1),
+                    color: AppColors.neonAmber.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: AppColors.neonAmber.withOpacity(0.3)),
-                    color: AppColors.gold.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: AppColors.gold.withValues(alpha: 0.3)),
+                    border: Border.all(color: AppColors.neonAmber.withValues(alpha: 0.3)),
                   ),
                   child: Text(
                     'RANK: ${user?.rank.toUpperCase() ?? 'BRONZE'}',

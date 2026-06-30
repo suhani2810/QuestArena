@@ -1,11 +1,8 @@
-// WHAT THIS FILE DOES:
-// The "Waiting Area" where players face off before the quiz begins.
-
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import '../../core/theme/app_theme.dart';
+import '../../core/constants/colors.dart';
 import '../../providers/game_providers.dart';
 import '../../providers/user_providers.dart';
 import '../widgets/character_avatar.dart';
@@ -73,7 +70,6 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
           final p1 = room.player1;
           final p2 = room.player2;
           
-          // If both players are ready, start the timer
           if (p1['isReady'] == true && p2 != null && p2['isReady'] == true) {
             _startCountdown();
           }
@@ -92,11 +88,10 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
             children: [
               Column(
                 children: [
-                  // Player 1 (Top)
                   Expanded(
                     child: Container(
                       width: double.infinity,
-                      color: AppColors.neonViolet.withOpacity(0.05),
+                      color: AppColors.neonViolet.withValues(alpha: 0.05),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -114,11 +109,10 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                     ),
                   ),
                   
-                  // Player 2 (Bottom)
                   Expanded(
                     child: Container(
                       width: double.infinity,
-                      color: AppColors.neonAmber.withOpacity(0.05),
+                      color: AppColors.neonAmber.withValues(alpha: 0.05),
                       child: p2 == null 
                         ? Column(
                             mainAxisAlignment: MainAxisAlignment.center,
@@ -151,7 +145,6 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                 ],
               ),
               
-              // VS Circle
               Center(
                 child: Container(
                   padding: const EdgeInsets.all(20),
@@ -160,7 +153,6 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                 ).animate().scale(delay: 400.ms, curve: Curves.elasticOut),
               ),
 
-              // Countdown Overlay
               if (p1['isReady'] == true && p2 != null && p2['isReady'] == true)
                 Container(
                   color: Colors.black87,
@@ -172,7 +164,6 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                   ),
                 ),
 
-              // Ready Button
               if (p2 != null && !(p1['isReady'] == true && p2['isReady'] == true))
                 Positioned(
                   bottom: 40,
@@ -180,9 +171,9 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                   right: 40,
                     child: ElevatedButton(
                       onPressed: () {
-                        final isP1 = currentUser?.uid == p1['uid'];
-                      if (currentUser == null) return;
-                      ref.read(gameRepositoryProvider).setPlayerReady(
+                        if (currentUser == null) return;
+                        final isP1 = currentUser.uid == p1['uid'];
+                        ref.read(gameRepositoryProvider).setPlayerReady(
                             widget.roomId,
                             isP1 ? 1 : 2,
                             currentUser.uid,
@@ -216,7 +207,7 @@ class _ReadyBadge extends StatelessWidget {
       margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       decoration: BoxDecoration(
-        color: isReady ? color.withOpacity(0.2) : AppColors.bgInputField,
+        color: isReady ? color.withValues(alpha: 0.2) : AppColors.bgInputField,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: isReady ? color : AppColors.divider),
       ),

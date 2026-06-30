@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import '../../core/constants/colors.dart';
 import '../../core/theme/app_theme.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -61,6 +62,7 @@ class _SplashScreenState extends State<SplashScreen>
                     fontFamily: 'Orbitron', // Using a sophisticated font if available, else default bold
                   ),
                 )
+
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
