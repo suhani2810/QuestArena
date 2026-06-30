@@ -154,11 +154,20 @@ class GameRepository {
 
       final data = snapshot.data() as Map<String, dynamic>;
       final currentIdx = data['currentQuestionIndex'] ?? 0;
+      final status = data['status'];
 
-      // Only advance if we are still on the index that timed out
-      if (currentIdx == fromIndex) {
+      // Normal match timeout
+      if (status == 'active' && currentIdx == fromIndex) {
         final questions = List<dynamic>.from(data['questions'] ?? []);
         _advanceOrFinish(transaction, roomRef, data, currentIdx, questions);
+      } 
+      // Arena Breaker timeout (Both failed to answer in time)
+      else if (status == 'arena_breaker') {
+        final submissions = Map<String, dynamic>.from(data['arenaBreakerSubmissions'] ?? {});
+        if (submissions.length < 2) {
+           // If we've reached this, it means the timer is up for someone. 
+           // We'll let the client submission logic handle it by sending "TIMEOUT".
+        }
       }
     });
   }
@@ -180,9 +189,15 @@ class GameRepository {
         transaction.update(roomRef, {
           'status': 'arena_breaker',
           'isArenaBreaker': true,
+          'arenaBreakerRound': 1,
           'questionStartedAt': FieldValue.serverTimestamp(),
+          'arenaBreakerQuestion': null,
+          'arenaBreakerSubmissions': {},
+          'arenaBreakerStatusMessage': 'Preparing Sudden Death...',
         });
-        _fetchArenaBreakerQuestion(roomRef.id);
+        // We trigger the fetch. The first one to reach here wins the race to call API.
+        // We pass categoryId to keep the sudden death relevant to the topic.
+        _fetchArenaBreakerQuestion(roomRef.id, 1, categoryId: data['categoryId']);
       } else {
         transaction.update(roomRef, {
           'status': 'finished',
@@ -193,9 +208,22 @@ class GameRepository {
   }
 
   // --- ARENA BREAKER LOGIC ---
-  Future<void> _fetchArenaBreakerQuestion(String roomId) async {
+  Future<void> _fetchArenaBreakerQuestion(String roomId, int round, {int? categoryId}) async {
+    final roomRef = _db.collection('gameRooms').doc(roomId);
+    
+    // Check if this round already has a question or is being fetched
+    final snap = await roomRef.get();
+    if (!snap.exists) return;
+    final data = snap.data() as Map<String, dynamic>;
+    if ((data['arenaBreakerQuestion'] != null || data['arenaBreakerStatusMessage'] == 'Fetching...') && (data['arenaBreakerRound'] == round)) {
+      return; 
+    }
+
+    await roomRef.update({'arenaBreakerStatusMessage': 'Fetching...'});
+
     try {
-      final response = await _dio.get(ApiConstants.triviaUrl, queryParameters: {'amount': 1});
+      final url = categoryId != null ? ApiConstants.triviaUrlForCategory(categoryId) : ApiConstants.triviaUrl;
+      final response = await _dio.get(url, queryParameters: {'amount': 1});
       final q = (response.data['results'] as List).first;
       final questionMap = {
         'question': GameUtils.decodeHtmlEntities(q['question']),
@@ -203,15 +231,19 @@ class GameRepository {
         'incorrect_answers': (q['incorrect_answers'] as List).map((a) => GameUtils.decodeHtmlEntities(a)).toList(),
       };
 
-      await _db.collection('gameRooms').doc(roomId).update({
+      await roomRef.update({
         'arenaBreakerQuestion': questionMap,
         'arenaBreakerSubmissions': {},
+        'arenaBreakerRound': round,
+        'arenaBreakerStatusMessage': null,
         'questionStartedAt': FieldValue.serverTimestamp(),
       });
     } catch (e) {
-      await _db.collection('gameRooms').doc(roomId).update({
+      await roomRef.update({
         'arenaBreakerQuestion': GameUtils.getFallbackQuestions().first,
         'arenaBreakerSubmissions': {},
+        'arenaBreakerRound': round,
+        'arenaBreakerStatusMessage': null,
         'questionStartedAt': FieldValue.serverTimestamp(),
       });
     }
@@ -229,7 +261,11 @@ class GameRepository {
       if (!snapshot.exists) return;
 
       final data = snapshot.data() as Map<String, dynamic>;
+      if (data['status'] == 'finished') return;
+
       final question = data['arenaBreakerQuestion'];
+      final currentRound = data['arenaBreakerRound'] ?? 0;
+      
       if (question == null) return;
 
       final submissions = Map<String, dynamic>.from(data['arenaBreakerSubmissions'] ?? {});
@@ -244,36 +280,46 @@ class GameRepository {
 
       transaction.update(roomRef, {'arenaBreakerSubmissions': submissions});
 
-      if (submissions.length == 2 || isCorrect) {
-        final p1 = data['player1'];
-        final p2 = data['player2'];
-        final s1 = submissions[p1['uid']];
-        final s2 = submissions[p2['uid']];
+      final p1 = data['player1'];
+      final p2 = data['player2'];
+      final s1 = submissions[p1['uid']];
+      final s2 = submissions[p2['uid']];
 
-        String? winnerId;
-        if (s1 != null && s1['isCorrect'] && (s2 == null || !s2['isCorrect'])) winnerId = p1['uid'];
-        else if (s2 != null && s2['isCorrect'] && (s1 == null || !s1['isCorrect'])) winnerId = p2['uid'];
-        else if (s1 != null && s2 != null && s1['isCorrect'] && s2['isCorrect']) {
-          winnerId = (s1['timestamp'] < s2['timestamp']) ? p1['uid'] : p2['uid'];
-        } else if (submissions.length == 2) {
-          // Both wrong -> Next round
-          _scheduleNextABRound(roomId);
-          return;
-        }
+      // Winner determination
+      String? winnerId;
+      
+      // Case 1: Someone is correct and the other hasn't answered yet or is incorrect
+      if (s1 != null && s1['isCorrect'] && (s2 == null || !s2['isCorrect'])) {
+        winnerId = p1['uid'];
+      } else if (s2 != null && s2['isCorrect'] && (s1 == null || !s1['isCorrect'])) {
+        winnerId = p2['uid'];
+      } 
+      // Case 2: Both correct -> fastest wins
+      else if (s1 != null && s2 != null && s1['isCorrect'] && s2['isCorrect']) {
+        winnerId = (s1['timestamp'] < s2['timestamp']) ? p1['uid'] : p2['uid'];
+      } 
+      // Case 3: Both answered but both are incorrect -> Next round
+      else if (s1 != null && s2 != null && !s1['isCorrect'] && !s2['isCorrect']) {
+        transaction.update(roomRef, {
+          'arenaBreakerStatusMessage': 'Both Incorrect! Next Round...',
+          'arenaBreakerQuestion': null, // Clear to trigger UI change
+        });
+        _scheduleNextABRound(roomId, currentRound + 1, categoryId: data['categoryId']);
+        return;
+      }
 
-        if (winnerId != null) {
-          transaction.update(roomRef, {
-            'status': 'finished',
-            'winnerId': winnerId,
-            'isArenaBreakerWin': true,
-          });
-        }
+      if (winnerId != null) {
+        transaction.update(roomRef, {
+          'status': 'finished',
+          'winnerId': winnerId,
+          'isArenaBreakerWin': true,
+        });
       }
     });
   }
 
-  void _scheduleNextABRound(String roomId) {
-    Future.delayed(const Duration(seconds: 3), () => _fetchArenaBreakerQuestion(roomId));
+  void _scheduleNextABRound(String roomId, int nextRound, {int? categoryId}) {
+    Future.delayed(const Duration(seconds: 3), () => _fetchArenaBreakerQuestion(roomId, nextRound, categoryId: categoryId));
   }
 
   Future<void> updatePresence(String roomId, String userId, bool isOnline) async {

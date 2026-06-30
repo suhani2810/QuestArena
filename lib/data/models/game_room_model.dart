@@ -21,6 +21,7 @@ class GameRoomModel {
   
   // Arena Breaker Fields
   final bool isArenaBreaker;
+  final int arenaBreakerRound;
   final Map<String, dynamic>? arenaBreakerQuestion;
   final Map<String, dynamic> arenaBreakerSubmissions;
   final bool isArenaBreakerWin;
@@ -46,6 +47,7 @@ class GameRoomModel {
     this.categoryId,
     this.categoryName = 'Mixed / Random',
     this.isArenaBreaker = false,
+    this.arenaBreakerRound = 0,
     this.arenaBreakerQuestion,
     this.arenaBreakerSubmissions = const {},
     this.isArenaBreakerWin = false,
@@ -75,6 +77,7 @@ class GameRoomModel {
       categoryId: json['categoryId'],
       categoryName: json['categoryName'] ?? 'Mixed / Random',
       isArenaBreaker: json['isArenaBreaker'] ?? false,
+      arenaBreakerRound: json['arenaBreakerRound'] ?? 0,
       arenaBreakerQuestion: json['arenaBreakerQuestion'],
       arenaBreakerSubmissions: Map<String, dynamic>.from(json['arenaBreakerSubmissions'] ?? {}),
       isArenaBreakerWin: json['isArenaBreakerWin'] ?? false,
@@ -100,6 +103,7 @@ class GameRoomModel {
     'categoryId': categoryId,
     'categoryName': categoryName,
     'isArenaBreaker': isArenaBreaker,
+    'arenaBreakerRound': arenaBreakerRound,
     'arenaBreakerQuestion': arenaBreakerQuestion,
     'arenaBreakerSubmissions': arenaBreakerSubmissions,
     'isArenaBreakerWin': isArenaBreakerWin,
@@ -116,6 +120,7 @@ class GameRoomModel {
     DateTime? questionStartedAt,
     String? winnerId,
     bool? isArenaBreaker,
+    int? arenaBreakerRound,
     Map<String, dynamic>? arenaBreakerQuestion,
     Map<String, dynamic>? arenaBreakerSubmissions,
     bool? isArenaBreakerWin,
@@ -136,6 +141,7 @@ class GameRoomModel {
       categoryId: categoryId,
       categoryName: categoryName,
       isArenaBreaker: isArenaBreaker ?? this.isArenaBreaker,
+      arenaBreakerRound: arenaBreakerRound ?? this.arenaBreakerRound,
       arenaBreakerQuestion: arenaBreakerQuestion ?? this.arenaBreakerQuestion,
       arenaBreakerSubmissions: arenaBreakerSubmissions ?? this.arenaBreakerSubmissions,
       isArenaBreakerWin: isArenaBreakerWin ?? this.isArenaBreakerWin,
