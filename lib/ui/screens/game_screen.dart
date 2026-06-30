@@ -1,5 +1,5 @@
 // WHAT THIS FILE DOES:
-// Optimized core quiz screen. 
+// Optimized core quiz screen.
 // Features: Heartbeat, Robust Reconnect, Independent Match Progression.
 
 import 'dart:async';
@@ -32,6 +32,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
   List<String> _shuffledOptions = [];
   List<String> _fiftyFiftyHiddenOptions = [];
   int _lastQuestionIndex = -1;
+  int _lastABRound = 0;
   bool _hasUsedFiftyFifty = false;
 
   // Heartbeat & Timer state
@@ -99,7 +100,11 @@ class _GameScreenState extends ConsumerState<GameScreen>
         // Timer EXPIRED - Driver logic
         if (!_hasAnswered && _timerController.isAnimating) {
           _timerController.stop();
-          _handleTimeout();
+          if (room.status == 'arena_breaker') {
+            _handleABAnswerSelection("TIMEOUT");
+          } else {
+            _handleTimeout();
+          }
         }
         // Force server to move to next Q if it hasn't yet (Driver role)
         if (room.status == 'active') {
@@ -148,12 +153,12 @@ class _GameScreenState extends ConsumerState<GameScreen>
     }
 
     await ref.read(gameRepositoryProvider).submitAnswer(
-          roomId: widget.roomId,
-          userId: user.uid,
-          playerNumber: isP1 ? 1 : 2,
-          answer: answer,
-          scoreIncrement: score,
-        );
+      roomId: widget.roomId,
+      userId: user.uid,
+      playerNumber: isP1 ? 1 : 2,
+      answer: answer,
+      scoreIncrement: score,
+    );
   }
 
   void _handleABAnswerSelection(String answer) async {
@@ -168,10 +173,10 @@ class _GameScreenState extends ConsumerState<GameScreen>
     if (user == null) return;
 
     await ref.read(gameRepositoryProvider).submitArenaBreakerAnswer(
-          roomId: widget.roomId,
-          userId: user.uid,
-          answer: answer,
-        );
+      roomId: widget.roomId,
+      userId: user.uid,
+      answer: answer,
+    );
   }
 
   void _startForfeitTimer() {
@@ -207,7 +212,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
         return;
       }
 
-      // Detect New Question
+      // Detect New Question (Regular)
       if (_lastQuestionIndex != room.currentQuestionIndex) {
         _lastQuestionIndex = room.currentQuestionIndex;
         _prepareOptions(room);
@@ -219,6 +224,28 @@ class _GameScreenState extends ConsumerState<GameScreen>
         _syncState(); // Immediate sync for new Q
       }
 
+      // Arena Breaker Synchronization
+      if (room.status == 'arena_breaker' && room.arenaBreakerQuestion != null) {
+        if (_lastABRound != room.arenaBreakerRound) {
+          final isFirstABQuestion = _lastABRound == 0;
+          _lastABRound = room.arenaBreakerRound;
+          _prepareABOptions(room.arenaBreakerQuestion!);
+          setState(() {
+            _hasAnswered = false;
+            _selectedAnswer = null;
+            // If we reconnected mid-match, skip the 3s intro if round already started a while ago
+            if (isFirstABQuestion && room.questionStartedAt != null) {
+              final elapsed = DateTime.now().difference(room.questionStartedAt!).inSeconds;
+              if (elapsed > 2) _showABIntro = false;
+            } else if (!isFirstABQuestion) {
+              // Not the first round (both got it wrong previously), skip intro
+              _showABIntro = false;
+            }
+          });
+          _syncState();
+        }
+      }
+
       // Presence Logic
       final String p1Uid = room.player1['uid'] ?? '';
       final String? p2Uid = room.player2?['uid'];
@@ -228,7 +255,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
         final presence = room.presence[opponentId];
         final lastSeen = presence?['lastSeen'] as DateTime?;
         final isOnline = presence?['isOnline'] ?? true;
-        
+
         bool disconnected = !isOnline || (lastSeen != null && DateTime.now().difference(lastSeen).inSeconds > 15);
 
         if (disconnected && !_isOpponentDisconnected) {
@@ -253,9 +280,9 @@ class _GameScreenState extends ConsumerState<GameScreen>
           backgroundColor: Colors.transparent,
           elevation: 0,
           leading: IconButton(icon: const Icon(Icons.close_rounded), onPressed: _showLeaveDialog),
-          title: _isOpponentDisconnected 
-            ? Text('OPPONENT DISCONNECTED', style: AppTextStyles.label.copyWith(color: AppColors.red, fontSize: 10))
-            : null,
+          title: _isOpponentDisconnected
+              ? Text('OPPONENT DISCONNECTED', style: AppTextStyles.label.copyWith(color: AppColors.red, fontSize: 10))
+              : null,
           centerTitle: true,
         ),
         body: roomAsync.when(
@@ -287,34 +314,44 @@ class _GameScreenState extends ConsumerState<GameScreen>
     final question = room.questions[room.currentQuestionIndex];
 
     return SafeArea(
-      child: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.all(24.0),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24.0),
         child: Column(
           children: [
+            const SizedBox(height: 16),
             _buildHeader(room),
-            const SizedBox(height: 32),
-            _buildTimerBar(),
-            const SizedBox(height: 32),
-            _buildPowerups(room),
             const SizedBox(height: 24),
-            Text(GameUtils.decodeHtmlEntities(question['question']), 
-                style: AppTextStyles.headline, textAlign: TextAlign.center)
-                .animate(key: ValueKey(room.currentQuestionIndex))
-                .fadeIn(),
-            const SizedBox(height: 32),
-            ..._shuffledOptions
-                .where((opt) => !_fiftyFiftyHiddenOptions.contains(opt))
-                .map((opt) => Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: _AnswerButton(
-                text: GameUtils.decodeHtmlEntities(opt),
-                isSelected: _selectedAnswer == opt,
-                isCorrect: _hasAnswered && opt == question['correct_answer'],
-                isWrong: _hasAnswered && _selectedAnswer == opt && opt != question['correct_answer'],
-                onTap: () => _onAnswerSelected(opt),
+            _buildTimerBar(),
+            const SizedBox(height: 24),
+            Expanded(
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                child: Column(
+                  children: [
+                    _buildPowerups(room),
+                    const SizedBox(height: 24),
+                    Text(GameUtils.decodeHtmlEntities(question['question']),
+                            style: AppTextStyles.headline, textAlign: TextAlign.center)
+                        .animate(key: ValueKey(room.currentQuestionIndex))
+                        .fadeIn(),
+                    const SizedBox(height: 32),
+                    ..._shuffledOptions
+                        .where((opt) => !_fiftyFiftyHiddenOptions.contains(opt))
+                        .map((opt) => Padding(
+                              padding: const EdgeInsets.only(bottom: 16),
+                              child: _AnswerButton(
+                                text: GameUtils.decodeHtmlEntities(opt),
+                                isSelected: _selectedAnswer == opt,
+                                isCorrect: _hasAnswered && opt == question['correct_answer'],
+                                isWrong: _hasAnswered && _selectedAnswer == opt && opt != question['correct_answer'],
+                                onTap: () => _onAnswerSelected(opt),
+                              ),
+                            )),
+                    const SizedBox(height: 16),
+                  ],
+                ),
               ),
-            )),
+            ),
           ],
         ),
       ),
@@ -437,6 +474,12 @@ class _GameScreenState extends ConsumerState<GameScreen>
     }
   }
 
+  void _prepareABOptions(Map<String, dynamic> question) {
+    _shuffledOptions = List<String>.from(question['incorrect_answers'] ?? [])
+      ..add(question['correct_answer'] ?? '')
+      ..shuffle();
+  }
+
   void _useFiftyFifty(GameRoomModel room) {
     if (_hasUsedFiftyFifty || _hasAnswered) return;
     final question = room.questions[room.currentQuestionIndex];
@@ -483,24 +526,39 @@ class _GameScreenState extends ConsumerState<GameScreen>
 
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: const EdgeInsets.symmetric(horizontal: 24.0),
         child: Column(
           children: [
+            const SizedBox(height: 16),
             Text('⚔ SUDDEN DEATH ⚔', style: AppTextStyles.label.copyWith(color: AppColors.red)),
-            const SizedBox(height: 40),
+            const SizedBox(height: 24),
             _buildTimerBar(),
-            const SizedBox(height: 40),
-            Text(GameUtils.decodeHtmlEntities(question['question']), style: AppTextStyles.headline, textAlign: TextAlign.center).animate().fadeIn(),
-            const SizedBox(height: 40),
-            ..._shuffledOptions.map((opt) => Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: _AnswerButton(
-                text: GameUtils.decodeHtmlEntities(opt),
-                isSelected: _selectedAnswer == opt,
-                onTap: () => _handleABAnswerSelection(opt),
-                isCorrect: false, isWrong: false,
+            const SizedBox(height: 24),
+            Expanded(
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                child: Column(
+                  children: [
+                    Text(GameUtils.decodeHtmlEntities(question['question']),
+                            style: AppTextStyles.headline, textAlign: TextAlign.center)
+                        .animate()
+                        .fadeIn(),
+                    const SizedBox(height: 32),
+                    ..._shuffledOptions.map((opt) => Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: _AnswerButton(
+                            text: GameUtils.decodeHtmlEntities(opt),
+                            isSelected: _selectedAnswer == opt,
+                            onTap: () => _handleABAnswerSelection(opt),
+                            isCorrect: false,
+                            isWrong: false,
+                          ),
+                        )),
+                    const SizedBox(height: 16),
+                  ],
+                ),
               ),
-            )),
+            ),
           ],
         ),
       ),

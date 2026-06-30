@@ -286,7 +286,7 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
                   Text(
                     widget.isPractice 
                         ? 'PRACTICE COMPLETE' 
-                        : (isDraw ? "IT'S A DRAW!" : (widget.room.forfeitWinnerId != null ? 'MATCH FORFEITED' : (isWinner ? 'VICTORY!' : 'DEFEAT'))),
+                        : (isDraw ? "IT'S A DRAW!" : (widget.room.forfeitWinnerId != null ? 'MATCH FORFEITED' : (widget.room.isArenaBreakerWin ? 'WINNER BY ARENA BREAKER ⚡' : (isWinner ? 'VICTORY!' : 'DEFEAT')))),
                     style: AppTextStyles.display.copyWith(
                       fontSize: 32,
                       color: isWinner ? AppColors.teal : (isDraw ? AppColors.gold : AppColors.red),
