@@ -4,7 +4,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'user_providers.dart';
 import '../data/repositories/matchmaking_repository.dart';
-import '../data/models/matchmaking_model.dart';
 
 final matchmakingRepositoryProvider = Provider((ref) {
   final dio = ref.watch(dioProvider);
