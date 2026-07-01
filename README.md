@@ -1,17 +1,22 @@
-# questarena
+# QuestArena
 
-A new Flutter project.
+A real-time multiplayer quiz battle platform.
 
-## Getting Started
+## Vercel Deployment Instructions
 
-This project is a starting point for a Flutter application.
+To fix the **404: NOT_FOUND** error on Vercel, ensure your project is configured with the following settings in the Vercel Dashboard:
 
-A few resources to get you started if this is your first Flutter project:
+1.  **Framework Preset**: `Other`
+2.  **Build Command**:
+    ```bash
+    if [ -d "flutter" ]; then cd flutter && git pull && cd ..; else git clone https://github.com/flutter/flutter.git; fi && ./flutter/bin/flutter build web --release
+    ```
+    *Note: This command clones the Flutter SDK and builds the web app. If you are deploying manually, just build locally and upload the contents of `build/web`.*
+3.  **Output Directory**: `build/web`
+4.  **Rewrites**: I have added a `vercel.json` file to your project root. This ensures that all URLs are redirected to `index.html`, preventing 404 errors when refreshing the page.
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+## Local Development
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+1.  Ensure you have Flutter installed.
+2.  Run `flutter pub get`.
+3.  Run `flutter run -d chrome`.

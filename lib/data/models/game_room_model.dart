@@ -18,6 +18,8 @@ class GameRoomModel {
   final String? nextMatchId;
   final int? categoryId;
   final String categoryName;
+  final bool isRanked;
+  final Map<String, dynamic> powerups;
   
   // Arena Breaker Fields
   final bool isArenaBreaker;
@@ -46,6 +48,8 @@ class GameRoomModel {
     this.nextMatchId,
     this.categoryId,
     this.categoryName = 'Mixed / Random',
+    this.isRanked = true,
+    this.powerups = const {},
     this.isArenaBreaker = false,
     this.arenaBreakerRound = 0,
     this.arenaBreakerQuestion,
@@ -76,6 +80,8 @@ class GameRoomModel {
       nextMatchId: json['nextMatchId'],
       categoryId: json['categoryId'],
       categoryName: json['categoryName'] ?? 'Mixed / Random',
+      isRanked: json['isRanked'] ?? true,
+      powerups: Map<String, dynamic>.from(json['powerups'] ?? {}),
       isArenaBreaker: json['isArenaBreaker'] ?? false,
       arenaBreakerRound: json['arenaBreakerRound'] ?? 0,
       arenaBreakerQuestion: json['arenaBreakerQuestion'],
@@ -102,6 +108,8 @@ class GameRoomModel {
     'nextMatchId': nextMatchId,
     'categoryId': categoryId,
     'categoryName': categoryName,
+    'isRanked': isRanked,
+    'powerups': powerups,
     'isArenaBreaker': isArenaBreaker,
     'arenaBreakerRound': arenaBreakerRound,
     'arenaBreakerQuestion': arenaBreakerQuestion,
@@ -119,11 +127,13 @@ class GameRoomModel {
     int? currentQuestionIndex,
     DateTime? questionStartedAt,
     String? winnerId,
+    bool? isRanked,
     bool? isArenaBreaker,
     int? arenaBreakerRound,
     Map<String, dynamic>? arenaBreakerQuestion,
     Map<String, dynamic>? arenaBreakerSubmissions,
     bool? isArenaBreakerWin,
+    Map<String, dynamic>? powerups,
   }) {
     return GameRoomModel(
       roomId: roomId,
@@ -140,6 +150,8 @@ class GameRoomModel {
       nextMatchId: nextMatchId,
       categoryId: categoryId,
       categoryName: categoryName,
+      isRanked: isRanked ?? this.isRanked,
+      powerups: powerups ?? this.powerups,
       isArenaBreaker: isArenaBreaker ?? this.isArenaBreaker,
       arenaBreakerRound: arenaBreakerRound ?? this.arenaBreakerRound,
       arenaBreakerQuestion: arenaBreakerQuestion ?? this.arenaBreakerQuestion,

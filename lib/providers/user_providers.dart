@@ -1,6 +1,7 @@
 // WHAT THIS FILE DOES:
 // Provides the current player's profile data globally.
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'auth_providers.dart';
 import '../data/services/firestore_service.dart';
@@ -27,11 +28,11 @@ final currentUserProvider = StreamProvider.autoDispose<UserModel?>((ref) {
 
   final repo = ref.watch(userRepositoryProvider);
   return repo.watchUserProfile(authState.uid).handleError((error) {
-    print('User Stream Error: $error');
+    debugPrint('User Stream Error: $error');
   });
 });
 
-final matchHistoryProvider = StreamProvider.autoDispose<List<MatchHistoryModel>>((ref) {
+final matchHistoryProvider = StreamProvider.autoDispose<List<MatchModel>>((ref) {
   final authState = ref.watch(authStateProvider).value;
   if (authState == null) return Stream.value([]);
 

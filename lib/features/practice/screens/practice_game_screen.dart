@@ -24,6 +24,7 @@ class _PracticeGameScreenState extends ConsumerState<PracticeGameScreen> with Si
   bool _hasAnswered = false;
   List<String> _shuffledOptions = [];
   int _lastQuestionIndex = -1;
+  String? _lastABQuestionText;
 
   @override
   void initState() {
@@ -209,6 +210,15 @@ class _PracticeGameScreenState extends ConsumerState<PracticeGameScreen> with Si
   Widget _buildArenaBreakerUI(GameRoomModel room) {
     final question = room.arenaBreakerQuestion;
     if (question == null) return const Center(child: CircularProgressIndicator());
+
+    // Refresh options if the AB question has changed
+    final qTextRaw = question['question']?.toString();
+    if (_lastABQuestionText != qTextRaw) {
+      _shuffledOptions = List<String>.from(question['incorrect_answers'] ?? [])
+        ..add(question['correct_answer'] ?? '')
+        ..shuffle();
+      _lastABQuestionText = qTextRaw;
+    }
     
     final qText = GameUtils.decodeHtmlEntities(question['question']);
 

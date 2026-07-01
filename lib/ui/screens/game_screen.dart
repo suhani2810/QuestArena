@@ -12,6 +12,8 @@ import '../../providers/game_providers.dart';
 import '../../providers/user_providers.dart';
 import '../../data/models/game_room_model.dart';
 import '../../core/utils/game_utils.dart';
+import '../widgets/smart_avatar.dart';
+import '../widgets/neon_swirl_background.dart';
 import 'result_screen.dart';
 
 class GameScreen extends ConsumerStatefulWidget {
@@ -30,8 +32,12 @@ class _GameScreenState extends ConsumerState<GameScreen>
   List<String> _shuffledOptions = [];
   List<String> _fiftyFiftyHiddenOptions = [];
   int _lastQuestionIndex = -1;
+  String? _lastABQuestionText;
   int _lastABRound = 0;
   bool _hasUsedFiftyFifty = false;
+  bool _isActivatingShield = false;
+  bool _isRevealingTimeoutAnswer = false;
+  int? _timeoutRevealQuestionIndex;
 
   // Heartbeat & Timer state
   Timer? _heartbeatTimer;
@@ -54,7 +60,8 @@ class _GameScreenState extends ConsumerState<GameScreen>
     );
 
     // Sync timer every second
-    _syncTimer = Timer.periodic(const Duration(seconds: 1), (_) => _syncState());
+    _syncTimer =
+        Timer.periodic(const Duration(seconds: 1), (_) => _syncState());
   }
 
   @override
@@ -75,19 +82,23 @@ class _GameScreenState extends ConsumerState<GameScreen>
 
   void _startHeartbeat() {
     _heartbeatTimer?.cancel();
-    _heartbeatTimer = Timer.periodic(const Duration(seconds: 5), (_) => _updatePresence(true));
+    _heartbeatTimer = Timer.periodic(
+        const Duration(seconds: 5), (_) => _updatePresence(true));
   }
 
   void _updatePresence(bool isOnline) {
     final user = ref.read(currentUserProvider).value;
     if (user != null) {
-      ref.read(gameRepositoryProvider).updatePresence(widget.roomId, user.uid, isOnline);
+      ref
+          .read(gameRepositoryProvider)
+          .updatePresence(widget.roomId, user.uid, isOnline);
     }
   }
 
   void _syncState() {
     final room = ref.read(gameRoomProvider(widget.roomId)).value;
-    if (room == null || (room.status != 'active' && room.status != 'arena_breaker')) return;
+    if (room == null ||
+        (room.status != 'active' && room.status != 'arena_breaker')) return;
 
     if (room.questionStartedAt != null) {
       final now = DateTime.now();
@@ -104,14 +115,17 @@ class _GameScreenState extends ConsumerState<GameScreen>
             _handleTimeout();
           }
         }
-        // Force server to move to next Q if it hasn't yet (Driver role)
-        if (room.status == 'active') {
-          ref.read(gameRepositoryProvider).forceAdvanceQuestion(widget.roomId, room.currentQuestionIndex);
+        // After the reveal window, force server to move to next Q if it hasn't yet.
+        if (room.status == 'active' && !_isRevealingTimeoutAnswer) {
+          ref
+              .read(gameRepositoryProvider)
+              .forceAdvanceQuestion(widget.roomId, room.currentQuestionIndex);
         }
       } else {
         // Sync local timer animation
         final targetValue = remainingMs / 15000.0;
-        if ((_timerController.value - targetValue).abs() > 0.05 || !_timerController.isAnimating) {
+        if ((_timerController.value - targetValue).abs() > 0.05 ||
+            !_timerController.isAnimating) {
           if (!_hasAnswered) {
             _timerController.duration = Duration(milliseconds: remainingMs);
             _timerController.reverse(from: targetValue);
@@ -123,7 +137,46 @@ class _GameScreenState extends ConsumerState<GameScreen>
 
   void _handleTimeout() async {
     if (_hasAnswered) return;
-    _onAnswerSelected("TIMEOUT");
+
+    final room = ref.read(gameRoomProvider(widget.roomId)).value;
+    if (room == null) return;
+
+    final timedOutIndex = room.currentQuestionIndex;
+
+    setState(() {
+      _selectedAnswer = "TIMEOUT";
+      _hasAnswered = true;
+      _isRevealingTimeoutAnswer = true;
+      _timeoutRevealQuestionIndex = timedOutIndex;
+    });
+
+    await Future.delayed(const Duration(seconds: 2));
+    if (!mounted) return;
+
+    final latestRoom = ref.read(gameRoomProvider(widget.roomId)).value;
+    if (latestRoom == null ||
+        latestRoom.status != 'active' ||
+        latestRoom.currentQuestionIndex != timedOutIndex) {
+      setState(() {
+        _isRevealingTimeoutAnswer = false;
+        _timeoutRevealQuestionIndex = null;
+      });
+      return;
+    }
+
+    await _submitAnswer("TIMEOUT");
+    if (!mounted) return;
+
+    await ref
+        .read(gameRepositoryProvider)
+        .forceAdvanceQuestion(widget.roomId, timedOutIndex);
+
+    if (mounted) {
+      setState(() {
+        _isRevealingTimeoutAnswer = false;
+        _timeoutRevealQuestionIndex = null;
+      });
+    }
   }
 
   void _onAnswerSelected(String answer) async {
@@ -135,6 +188,10 @@ class _GameScreenState extends ConsumerState<GameScreen>
     });
     _timerController.stop();
 
+    await _submitAnswer(answer);
+  }
+
+  Future<void> _submitAnswer(String answer) async {
     final room = ref.read(gameRoomProvider(widget.roomId)).value;
     final user = ref.read(currentUserProvider).value;
     if (room == null || user == null) return;
@@ -151,12 +208,12 @@ class _GameScreenState extends ConsumerState<GameScreen>
     }
 
     await ref.read(gameRepositoryProvider).submitAnswer(
-      roomId: widget.roomId,
-      userId: user.uid,
-      playerNumber: isP1 ? 1 : 2,
-      answer: answer,
-      scoreIncrement: score,
-    );
+          roomId: widget.roomId,
+          userId: user.uid,
+          playerNumber: isP1 ? 1 : 2,
+          answer: answer,
+          scoreIncrement: score,
+        );
   }
 
   void _handleABAnswerSelection(String answer) async {
@@ -171,10 +228,10 @@ class _GameScreenState extends ConsumerState<GameScreen>
     if (user == null) return;
 
     await ref.read(gameRepositoryProvider).submitArenaBreakerAnswer(
-      roomId: widget.roomId,
-      userId: user.uid,
-      answer: answer,
-    );
+          roomId: widget.roomId,
+          userId: user.uid,
+          answer: answer,
+        );
   }
 
   void _startForfeitTimer() {
@@ -186,7 +243,10 @@ class _GameScreenState extends ConsumerState<GameScreen>
       } else {
         _forfeitTimer?.cancel();
         final user = ref.read(currentUserProvider).value;
-        if (user != null) ref.read(gameRepositoryProvider).handleForfeit(widget.roomId, user.uid);
+        if (user != null)
+          ref
+              .read(gameRepositoryProvider)
+              .handleForfeit(widget.roomId, user.uid);
       }
     });
   }
@@ -196,7 +256,8 @@ class _GameScreenState extends ConsumerState<GameScreen>
     final user = ref.watch(currentUserProvider).value;
     if (user == null) return const Scaffold();
 
-    ref.listen<AsyncValue<GameRoomModel?>>(gameRoomProvider(widget.roomId), (prev, next) {
+    ref.listen<AsyncValue<GameRoomModel?>>(gameRoomProvider(widget.roomId),
+        (prev, next) {
       final room = next.value;
       if (room == null) return;
 
@@ -218,6 +279,8 @@ class _GameScreenState extends ConsumerState<GameScreen>
           _hasAnswered = false;
           _selectedAnswer = null;
           _fiftyFiftyHiddenOptions = [];
+          _isRevealingTimeoutAnswer = false;
+          _timeoutRevealQuestionIndex = null;
         });
         _syncState(); // Immediate sync for new Q
       }
@@ -233,7 +296,8 @@ class _GameScreenState extends ConsumerState<GameScreen>
             _selectedAnswer = null;
             // If we reconnected mid-match, skip the 3s intro if round already started a while ago
             if (isFirstABQuestion && room.questionStartedAt != null) {
-              final elapsed = DateTime.now().difference(room.questionStartedAt!).inSeconds;
+              final elapsed =
+                  DateTime.now().difference(room.questionStartedAt!).inSeconds;
               if (elapsed > 2) _showABIntro = false;
             } else if (!isFirstABQuestion) {
               // Not the first round (both got it wrong previously), skip intro
@@ -249,12 +313,15 @@ class _GameScreenState extends ConsumerState<GameScreen>
       final String? p2Uid = room.player2?['uid'];
       final String? opponentId = user.uid == p1Uid ? p2Uid : p1Uid;
 
-      if (opponentId != null && (room.status == 'active' || room.status == 'arena_breaker')) {
+      if (opponentId != null &&
+          (room.status == 'active' || room.status == 'arena_breaker')) {
         final presence = room.presence[opponentId];
         final lastSeen = presence?['lastSeen'] as DateTime?;
         final isOnline = presence?['isOnline'] ?? true;
 
-        bool disconnected = !isOnline || (lastSeen != null && DateTime.now().difference(lastSeen).inSeconds > 15);
+        bool disconnected = !isOnline ||
+            (lastSeen != null &&
+                DateTime.now().difference(lastSeen).inSeconds > 15);
 
         if (disconnected && !_isOpponentDisconnected) {
           setState(() => _isOpponentDisconnected = true);
@@ -277,22 +344,32 @@ class _GameScreenState extends ConsumerState<GameScreen>
         appBar: AppBar(
           backgroundColor: Colors.transparent,
           elevation: 0,
-          leading: IconButton(icon: const Icon(Icons.close_rounded), onPressed: _showLeaveDialog),
+          leading: IconButton(
+              icon: const Icon(Icons.close_rounded),
+              onPressed: _showLeaveDialog),
           title: _isOpponentDisconnected
-              ? Text('OPPONENT DISCONNECTED', style: AppTextStyles.label.copyWith(color: AppColors.red, fontSize: 10))
+              ? Text('OPPONENT DISCONNECTED',
+                  style: AppTextStyles.label
+                      .copyWith(color: AppColors.red, fontSize: 10))
               : null,
           centerTitle: true,
         ),
         body: roomAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator(color: AppColors.gold)),
+          loading: () => const Center(
+              child: CircularProgressIndicator(color: AppColors.gold)),
           error: (e, s) => Center(child: Text('Error: $e')),
           data: (room) {
             if (room == null) return const Center(child: Text('Room Error'));
-            return Stack(
-              children: [
-                _buildMainUI(room),
-                if (_isOpponentDisconnected) _buildDisconnectBanner(),
-              ],
+            return NeonSwirlBackground(
+              colors: room.status == 'arena_breaker'
+                  ? const [AppColors.red, AppColors.neonViolet]
+                  : const [AppColors.neonCyan, AppColors.neonViolet],
+              child: Stack(
+                children: [
+                  _buildMainUI(room),
+                  if (_isOpponentDisconnected) _buildDisconnectBanner(),
+                ],
+              ),
             );
           },
         ),
@@ -302,7 +379,8 @@ class _GameScreenState extends ConsumerState<GameScreen>
 
   Widget _buildMainUI(GameRoomModel room) {
     if (room.status == 'arena_breaker') return _buildArenaBreakerRound(room);
-    if (room.questions.isEmpty) return const Center(child: CircularProgressIndicator());
+    if (room.questions.isEmpty)
+      return const Center(child: CircularProgressIndicator());
 
     final question = room.questions[room.currentQuestionIndex];
 
@@ -324,7 +402,8 @@ class _GameScreenState extends ConsumerState<GameScreen>
                     _buildPowerups(room),
                     const SizedBox(height: 24),
                     Text(GameUtils.decodeHtmlEntities(question['question']),
-                            style: AppTextStyles.headline, textAlign: TextAlign.center)
+                            style: AppTextStyles.headline,
+                            textAlign: TextAlign.center)
                         .animate(key: ValueKey(room.currentQuestionIndex))
                         .fadeIn(),
                     const SizedBox(height: 32),
@@ -335,8 +414,11 @@ class _GameScreenState extends ConsumerState<GameScreen>
                               child: _AnswerButton(
                                 text: GameUtils.decodeHtmlEntities(opt),
                                 isSelected: _selectedAnswer == opt,
-                                isCorrect: _hasAnswered && opt == question['correct_answer'],
-                                isWrong: _hasAnswered && _selectedAnswer == opt && opt != question['correct_answer'],
+                                isCorrect: _hasAnswered &&
+                                    opt == question['correct_answer'],
+                                isWrong: _hasAnswered &&
+                                    _selectedAnswer == opt &&
+                                    opt != question['correct_answer'],
                                 onTap: () => _onAnswerSelected(opt),
                               ),
                             )),
@@ -345,6 +427,16 @@ class _GameScreenState extends ConsumerState<GameScreen>
                 ),
               ),
             ),
+            if (_isRevealingTimeoutAnswer &&
+                _timeoutRevealQuestionIndex == room.currentQuestionIndex)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  'Time up! Correct answer revealed.',
+                  style: AppTextStyles.label.copyWith(color: AppColors.gold),
+                  textAlign: TextAlign.center,
+                ).animate().fadeIn().shake(hz: 2),
+              ),
           ],
         ),
       ),
@@ -352,22 +444,36 @@ class _GameScreenState extends ConsumerState<GameScreen>
   }
 
   Widget _buildHeader(GameRoomModel room) {
+    final user = ref.read(currentUserProvider).value;
+    final isP1 = user?.uid == room.player1['uid'];
+
+    final myData = isP1 ? room.player1 : room.player2;
+    final opData = isP1 ? room.player2 : room.player1;
+
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Expanded(
-          child: _PlayerStat(name: room.player1['username'], score: room.player1['score'], isLeft: true),
-        ),
-        const SizedBox(width: 12),
-        Text('${room.currentQuestionIndex + 1}/10', style: AppTextStyles.label),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _PlayerStat(
-            name: room.player2?['username'] ?? '...',
-            score: room.player2?['score'] ?? 0,
-            isLeft: false,
+        _PlayerStat(
+            name: myData?['username'] ?? 'Me',
+            avatarUrl: myData?['avatarUrl'],
+            score: myData?['score'] ?? 0,
+            isLeft: true),
+        const Spacer(),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: AppColors.bgDeep,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.surface),
           ),
+          child: Text('${room.currentQuestionIndex + 1}/10',
+              style: AppTextStyles.label.copyWith(color: AppColors.gold)),
         ),
+        const Spacer(),
+        _PlayerStat(
+            name: opData?['username'] ?? '...',
+            avatarUrl: opData?['avatarUrl'],
+            score: opData?['score'] ?? 0,
+            isLeft: false),
       ],
     );
   }
@@ -387,6 +493,20 @@ class _GameScreenState extends ConsumerState<GameScreen>
   }
 
   Widget _buildPowerups(GameRoomModel room) {
+    final user = ref.read(currentUserProvider).value;
+    final uid = user?.uid;
+    final shieldBlocks = Map<String, dynamic>.from(
+      room.powerups['shieldBonusBlocks'] ?? {},
+    );
+    final shieldState = uid == null
+        ? <String, dynamic>{}
+        : Map<String, dynamic>.from(shieldBlocks[uid] ?? {});
+    final hasUsedShield = shieldState.isNotEmpty;
+    final isShieldActiveThisQuestion =
+        shieldState['questionIndex'] == room.currentQuestionIndex;
+    final shieldUnlocked = _currentCorrectStreak(room) >= 2;
+    final opponentAlreadyAnswered = _opponentHasAnsweredCurrentQuestion(room);
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -397,20 +517,36 @@ class _GameScreenState extends ConsumerState<GameScreen>
           isDisabled: _hasAnswered,
           onTap: () => _useFiftyFifty(room),
         ),
+        const SizedBox(width: 12),
+        _PowerupButton(
+          label: isShieldActiveThisQuestion ? 'SHIELD ON' : 'SHIELD',
+          icon: Icons.shield_rounded,
+          isUsed: hasUsedShield,
+          isDisabled: !shieldUnlocked ||
+              _hasAnswered ||
+              opponentAlreadyAnswered ||
+              _isActivatingShield,
+          onTap: () => _useShield(room),
+        ),
       ],
     );
   }
 
   Widget _buildDisconnectBanner() {
     return Positioned(
-      top: 0, left: 0, right: 0,
+      top: 0,
+      left: 0,
+      right: 0,
       child: Container(
         color: AppColors.red.withValues(alpha: 0.95),
         padding: const EdgeInsets.all(12),
         child: Column(
           children: [
-            const Text('Opponent disconnected.', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-            Text('Ending in $_forfeitCountdown seconds...', style: const TextStyle(fontSize: 12, color: Colors.white70)),
+            const Text('Opponent disconnected.',
+                style: TextStyle(
+                    fontWeight: FontWeight.bold, color: Colors.white)),
+            Text('Ending in $_forfeitCountdown seconds...',
+                style: const TextStyle(fontSize: 12, color: Colors.white70)),
           ],
         ),
       ).animate().slideY(begin: -1, end: 0),
@@ -422,11 +558,18 @@ class _GameScreenState extends ConsumerState<GameScreen>
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.cardBg,
-        title: Text('FORFEIT?', style: AppTextStyles.headline.copyWith(color: AppColors.red)),
-        content: const Text('Leaving will grant your opponent an immediate win.'),
+        title: Text('FORFEIT?',
+            style: AppTextStyles.headline.copyWith(color: AppColors.red)),
+        content:
+            const Text('Leaving will grant your opponent an immediate win.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('CANCEL')),
-          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), style: ElevatedButton.styleFrom(backgroundColor: AppColors.red), child: const Text('LEAVE')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('CANCEL')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.red),
+              child: const Text('LEAVE')),
         ],
       ),
     );
@@ -439,16 +582,21 @@ class _GameScreenState extends ConsumerState<GameScreen>
         final p2Uid = room.player2?['uid'];
         final String? opponentId = user.uid == p1Uid ? p2Uid : p1Uid;
         if (opponentId != null) {
-          ref.read(gameRepositoryProvider).leaveMatch(widget.roomId, user.uid, opponentId);
+          ref
+              .read(gameRepositoryProvider)
+              .leaveMatch(widget.roomId, user.uid, opponentId);
         }
       }
     }
   }
 
   void _prepareOptions(GameRoomModel room) {
-    if (room.currentQuestionIndex >= 0 && room.currentQuestionIndex < room.questions.length) {
+    if (room.currentQuestionIndex >= 0 &&
+        room.currentQuestionIndex < room.questions.length) {
       final question = room.questions[room.currentQuestionIndex];
-      _shuffledOptions = List<String>.from(question['incorrect_answers'])..add(question['correct_answer'])..shuffle();
+      _shuffledOptions = List<String>.from(question['incorrect_answers'])
+        ..add(question['correct_answer'])
+        ..shuffle();
     }
   }
 
@@ -461,11 +609,75 @@ class _GameScreenState extends ConsumerState<GameScreen>
   void _useFiftyFifty(GameRoomModel room) {
     if (_hasUsedFiftyFifty || _hasAnswered) return;
     final question = room.questions[room.currentQuestionIndex];
-    final wrong = _shuffledOptions.where((o) => o != question['correct_answer']).toList()..shuffle();
+    final wrong = _shuffledOptions
+        .where((o) => o != question['correct_answer'])
+        .toList()
+      ..shuffle();
     setState(() {
       _hasUsedFiftyFifty = true;
       _fiftyFiftyHiddenOptions = wrong.take(2).toList();
     });
+  }
+
+  int _currentCorrectStreak(GameRoomModel room) {
+    final user = ref.read(currentUserProvider).value;
+    if (user == null) return 0;
+
+    final isP1 = user.uid == room.player1['uid'];
+    final player = isP1 ? room.player1 : room.player2;
+    final answers = List<String>.from(player?['answers'] ?? []);
+    final maxIndex = answers.length < room.questions.length
+        ? answers.length
+        : room.questions.length;
+
+    int streak = 0;
+    for (int i = maxIndex - 1; i >= 0; i--) {
+      final question = room.questions[i];
+      if (answers[i] == question['correct_answer']) {
+        streak++;
+      } else {
+        break;
+      }
+    }
+    return streak;
+  }
+
+  bool _opponentHasAnsweredCurrentQuestion(GameRoomModel room) {
+    final user = ref.read(currentUserProvider).value;
+    if (user == null) return false;
+
+    final isP1 = user.uid == room.player1['uid'];
+    final opponent = isP1 ? room.player2 : room.player1;
+    final answers = List<String>.from(opponent?['answers'] ?? []);
+    return answers.length > room.currentQuestionIndex;
+  }
+
+  void _useShield(GameRoomModel room) async {
+    final user = ref.read(currentUserProvider).value;
+    if (user == null ||
+        _hasAnswered ||
+        _isActivatingShield ||
+        _currentCorrectStreak(room) < 2 ||
+        _opponentHasAnsweredCurrentQuestion(room)) {
+      return;
+    }
+
+    setState(() => _isActivatingShield = true);
+    await ref.read(gameRepositoryProvider).activateShieldBonusBlock(
+          roomId: widget.roomId,
+          userId: user.uid,
+          questionIndex: room.currentQuestionIndex,
+        );
+
+    if (!mounted) return;
+    setState(() => _isActivatingShield = false);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Shield activated! Opponent bonus points blocked.'),
+        duration: Duration(seconds: 2),
+      ),
+    );
   }
 
   Widget _buildArenaBreakerRound(GameRoomModel room) {
@@ -474,13 +686,20 @@ class _GameScreenState extends ConsumerState<GameScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text('⚔ ARENA BREAKER ⚔', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.red)).animate().scale(duration: 600.ms, curve: Curves.elasticOut),
+            const Text('⚔ ARENA BREAKER ⚔',
+                    style: TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.red))
+                .animate()
+                .scale(duration: 600.ms, curve: Curves.elasticOut),
             const SizedBox(height: 12),
             Text('Scores Tied', style: AppTextStyles.headline),
             const SizedBox(height: 8),
             Text('Next correct answer wins.', style: AppTextStyles.label),
             const SizedBox(height: 48),
-            _ABCountdown(onFinished: () => setState(() => _showABIntro = false)),
+            _ABCountdown(
+                onFinished: () => setState(() => _showABIntro = false)),
           ],
         ),
       );
@@ -491,16 +710,28 @@ class _GameScreenState extends ConsumerState<GameScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.sync_problem_rounded, color: AppColors.red, size: 64).animate(onPlay: (c) => c.repeat()).rotate(duration: 2.seconds),
+            const Icon(Icons.sync_problem_rounded,
+                    color: AppColors.red, size: 64)
+                .animate(onPlay: (c) => c.repeat())
+                .rotate(duration: 2.seconds),
             const SizedBox(height: 24),
-            Text(room.arenaBreakerStatusMessage!, style: AppTextStyles.headline, textAlign: TextAlign.center),
+            Text(room.arenaBreakerStatusMessage!,
+                style: AppTextStyles.headline, textAlign: TextAlign.center),
           ],
         ),
       );
     }
 
     final question = room.arenaBreakerQuestion;
-    if (question == null) return const Center(child: CircularProgressIndicator());
+    if (question == null)
+      return const Center(child: CircularProgressIndicator());
+
+    // Refresh options if the AB question has changed
+    final qTextRaw = question['question']?.toString();
+    if (_lastABQuestionText != qTextRaw) {
+      _prepareABOptions(question);
+      _lastABQuestionText = qTextRaw;
+    }
 
     return SafeArea(
       child: Padding(
@@ -508,7 +739,8 @@ class _GameScreenState extends ConsumerState<GameScreen>
         child: Column(
           children: [
             const SizedBox(height: 16),
-            Text('⚔ SUDDEN DEATH ⚔', style: AppTextStyles.label.copyWith(color: AppColors.red)),
+            Text('⚔ SUDDEN DEATH ⚔',
+                style: AppTextStyles.label.copyWith(color: AppColors.red)),
             const SizedBox(height: 24),
             _buildTimerBar(),
             const SizedBox(height: 24),
@@ -518,7 +750,8 @@ class _GameScreenState extends ConsumerState<GameScreen>
                 child: Column(
                   children: [
                     Text(GameUtils.decodeHtmlEntities(question['question']),
-                            style: AppTextStyles.headline, textAlign: TextAlign.center)
+                            style: AppTextStyles.headline,
+                            textAlign: TextAlign.center)
                         .animate()
                         .fadeIn(),
                     const SizedBox(height: 32),
@@ -546,22 +779,41 @@ class _GameScreenState extends ConsumerState<GameScreen>
 
 class _PlayerStat extends StatelessWidget {
   final String name;
+  final String? avatarUrl;
   final int score;
   final bool isLeft;
-  const _PlayerStat({required this.name, required this.score, required this.isLeft});
+
+  const _PlayerStat(
+      {required this.name,
+      this.avatarUrl,
+      required this.score,
+      required this.isLeft});
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: isLeft ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      textDirection: isLeft ? TextDirection.ltr : TextDirection.rtl,
       children: [
-        Text(
-          name,
-          style: AppTextStyles.label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+        SmartAvatar(
+          avatarUrl: avatarUrl,
+          size: 44,
+          showBorder: true,
+          showGlow: score > 50,
         ),
-        Text('$score', style: AppTextStyles.headline.copyWith(color: AppColors.gold, fontSize: 20)),
+        const SizedBox(width: 12),
+        Column(
+          crossAxisAlignment:
+              isLeft ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+          children: [
+            Text(name.toUpperCase(),
+                style: AppTextStyles.label
+                    .copyWith(fontSize: 9, letterSpacing: 1)),
+            Text('$score',
+                style: AppTextStyles.headline.copyWith(
+                    color: AppColors.gold, fontSize: 18, letterSpacing: 0)),
+          ],
+        ),
       ],
     );
   }
@@ -574,11 +826,19 @@ class _PowerupButton extends StatelessWidget {
   final bool isDisabled;
   final VoidCallback onTap;
 
-  const _PowerupButton({required this.label, required this.icon, required this.isUsed, required this.isDisabled, required this.onTap});
+  const _PowerupButton(
+      {required this.label,
+      required this.icon,
+      required this.isUsed,
+      required this.isDisabled,
+      required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final disabled = isUsed || isDisabled;
+    final buttonText = isUsed && label.endsWith('ON')
+        ? label
+        : (isUsed ? '$label USED' : label);
     return GestureDetector(
       onTap: disabled ? null : onTap,
       child: AnimatedOpacity(
@@ -589,14 +849,21 @@ class _PowerupButton extends StatelessWidget {
           decoration: BoxDecoration(
             color: AppColors.purple.withValues(alpha: 0.14),
             borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: isUsed ? AppColors.surface : AppColors.purple, width: 1.5),
+            border: Border.all(
+                color: isUsed ? AppColors.surface : AppColors.purple,
+                width: 1.5),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(isUsed ? Icons.check_circle_rounded : icon, color: isUsed ? AppColors.textMuted : AppColors.purple, size: 18),
+              Icon(isUsed ? Icons.check_circle_rounded : icon,
+                  color: isUsed ? AppColors.textMuted : AppColors.purple,
+                  size: 18),
               const SizedBox(width: 8),
-              Text(isUsed ? '$label USED' : label, style: AppTextStyles.label.copyWith(color: isUsed ? AppColors.textMuted : Colors.white, fontWeight: FontWeight.bold)),
+              Text(buttonText,
+                  style: AppTextStyles.label.copyWith(
+                      color: isUsed ? AppColors.textMuted : Colors.white,
+                      fontWeight: FontWeight.bold)),
             ],
           ),
         ),
@@ -638,7 +905,9 @@ class _ABCountdownState extends State<_ABCountdown> {
 
   @override
   Widget build(BuildContext context) {
-    return Text('$_count', style: AppTextStyles.display.copyWith(fontSize: 80, color: AppColors.gold))
+    return Text('$_count',
+            style: AppTextStyles.display
+                .copyWith(fontSize: 80, color: AppColors.gold))
         .animate(key: ValueKey(_count))
         .scale(duration: 400.ms)
         .fadeOut(delay: 600.ms);
@@ -652,7 +921,12 @@ class _AnswerButton extends StatelessWidget {
   final bool isWrong;
   final VoidCallback onTap;
 
-  const _AnswerButton({required this.text, required this.isSelected, required this.isCorrect, required this.isWrong, required this.onTap});
+  const _AnswerButton(
+      {required this.text,
+      required this.isSelected,
+      required this.isCorrect,
+      required this.isWrong,
+      required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -662,11 +936,24 @@ class _AnswerButton extends StatelessWidget {
         width: double.infinity,
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: isCorrect ? Colors.teal.withValues(alpha: 0.1) : (isWrong ? Colors.red.withValues(alpha: 0.1) : AppColors.cardBg),
+          color: isCorrect
+              ? Colors.teal.withValues(alpha: 0.1)
+              : isWrong
+                  ? Colors.red.withValues(alpha: 0.1)
+                  : AppColors.cardBg,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: isCorrect ? Colors.teal : (isWrong ? Colors.red : (isSelected ? AppColors.purple : AppColors.surface)), width: 2),
+          border: Border.all(
+              color: isCorrect
+                  ? Colors.teal
+                  : (isWrong
+                      ? Colors.red
+                      : (isSelected ? AppColors.purple : AppColors.surface)),
+              width: 2),
         ),
-        child: Text(text, style: AppTextStyles.bodyMd.copyWith(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal), textAlign: TextAlign.center),
+        child: Text(text,
+            style: AppTextStyles.bodyMd.copyWith(
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal),
+            textAlign: TextAlign.center),
       ),
     );
   }

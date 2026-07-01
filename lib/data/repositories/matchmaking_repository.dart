@@ -1,8 +1,10 @@
 // WHAT THIS FILE DOES:
-// Manages the player's presence in the matchmaking queue with robust transaction logic.
+// Manages the player's presence in the matchmaking queue with robust
+// transaction logic, category matching, and ELO-based search expansion.
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import '../../core/constants/api_constants.dart';
 import '../../core/utils/game_utils.dart';
 import '../models/matchmaking_model.dart';
@@ -13,144 +15,211 @@ class MatchmakingRepository {
 
   MatchmakingRepository(this._dio);
 
-  // Start searching for a match
+  // Start searching for a match.
   Future<void> startSearching(MatchmakingModel ticket) async {
-    // 0. Initial Cleanup: Delete any old ticket for this user
-    await _db.collection('matchmaking').doc(ticket.uid).delete();
-
-    // 1. Create our searching ticket
     final myTicketRef = _db.collection('matchmaking').doc(ticket.uid);
+
+    // Cleanup any old ticket for this user, then save the fresh ticket.
+    await myTicketRef.delete();
     await myTicketRef.set({
       ...ticket.toJson(),
       'status': 'searching',
       'lastSeen': FieldValue.serverTimestamp(),
     });
 
-    // 2. Look for potential opponents
-    // We filter by status and category in Firestore. This is more efficient.
-    final thirtySecondsAgo = DateTime.now().subtract(const Duration(seconds: 30));
-    
-    final potentialMatches = await _db.collection('matchmaking')
+    await _tryMatch(ticket);
+  }
+
+  // Expansion method to be called periodically by the client.
+  Future<void> expandSearch(String uid) async {
+    final doc = await _db.collection('matchmaking').doc(uid).get();
+    if (!doc.exists || doc.data() == null) return;
+
+    final data = doc.data()!;
+    if (data['status'] != 'searching') return;
+
+    final currentRange = (data['searchRange'] as num? ?? 100).toInt();
+    final newRange = currentRange + 100;
+
+    await _db.collection('matchmaking').doc(uid).update({
+      'searchRange': newRange,
+      'lastSeen': FieldValue.serverTimestamp(),
+    });
+
+    final updatedTicket = MatchmakingModel.fromJson({
+      ...data,
+      'searchRange': newRange,
+    });
+    await _tryMatch(updatedTicket);
+  }
+
+  Future<void> _tryMatch(MatchmakingModel ticket) async {
+    final myTicketRef = _db.collection('matchmaking').doc(ticket.uid);
+
+    final potentialMatches = await _db
+        .collection('matchmaking')
         .where('status', isEqualTo: 'searching')
         .where('categoryId', isEqualTo: ticket.categoryId)
         .limit(20)
         .get();
 
+    QueryDocumentSnapshot<Map<String, dynamic>>? bestMatchDoc;
+    var bestEloDiff = 999999;
+    final thirtySecondsAgo = DateTime.now().subtract(
+      const Duration(seconds: 30),
+    );
+
     for (final doc in potentialMatches.docs) {
       if (doc.id == ticket.uid) continue;
 
       final data = doc.data();
-      
-      // Filter staleness in Dart to avoid needing a 3-field composite index
-      final DateTime startedAt;
-      final startedAtRaw = data['searchStartedAt'];
-      if (startedAtRaw == null) continue;
-      
-      if (startedAtRaw is Timestamp) {
-        startedAt = startedAtRaw.toDate();
-      } else {
-        startedAt = DateTime.parse(startedAtRaw.toString());
+
+      final startedAt = _parseDate(data['searchStartedAt']);
+      if (startedAt == null || startedAt.isBefore(thirtySecondsAgo)) {
+        continue;
       }
 
-      if (startedAt.isBefore(thirtySecondsAgo)) continue;
+      final opponentElo = (data['eloRating'] as num? ?? 1200).toInt();
+      final eloDiff = (ticket.eloRating - opponentElo).abs();
+      final opponentRange = (data['searchRange'] as num? ?? 100).toInt();
+      final maxAllowedDiff = ticket.searchRange > opponentRange
+          ? ticket.searchRange
+          : opponentRange;
 
-      // 3. Attempt to "Claim" this opponent via Transaction
-      final opponentUid = doc.id;
-      final opponentRef = _db.collection('matchmaking').doc(opponentUid);
+      if (eloDiff <= maxAllowedDiff && eloDiff < bestEloDiff) {
+        bestEloDiff = eloDiff;
+        bestMatchDoc = doc;
+      }
+    }
 
-      final success = await _db.runTransaction((transaction) async {
-        final oppSnap = await transaction.get(opponentRef);
-        final mySnap = await transaction.get(myTicketRef);
+    if (bestMatchDoc == null) return;
 
-        if (!oppSnap.exists || !mySnap.exists) return false;
-        
-        final oppData = oppSnap.data()!;
-        final myData = mySnap.data()!;
+    final opponentUid = bestMatchDoc.id;
+    final opponentRef = _db.collection('matchmaking').doc(opponentUid);
 
-        // Check if both are still searching
-        if (oppData['status'] != 'searching' || myData['status'] != 'searching') {
-          return false;
-        }
+    final success = await _db.runTransaction((transaction) async {
+      final oppSnap = await transaction.get(opponentRef);
+      final mySnap = await transaction.get(myTicketRef);
 
-        // Lock both tickets to 'creating' status so no one else picks them up
-        transaction.update(opponentRef, {'status': 'matched_pending', 'matchedWith': ticket.uid});
-        transaction.update(myTicketRef, {'status': 'creating', 'matchedWith': opponentUid});
-        
-        return true;
+      if (!oppSnap.exists || !mySnap.exists) return false;
+
+      final oppData = oppSnap.data()!;
+      final myData = mySnap.data()!;
+
+      if (oppData['status'] != 'searching' ||
+          myData['status'] != 'searching' ||
+          oppData['categoryId'] != ticket.categoryId ||
+          myData['categoryId'] != ticket.categoryId) {
+        return false;
+      }
+
+      transaction.update(opponentRef, {
+        'status': 'matched_pending',
+        'matchedWith': ticket.uid,
+      });
+      transaction.update(myTicketRef, {
+        'status': 'creating',
+        'matchedWith': opponentUid,
       });
 
-      if (success) {
-        // I am the "Host" - I will create the game room
-        await _createGameRoomAndFinalize(ticket.uid, opponentUid, ticket.categoryId, ticket.categoryName);
-        return;
-      }
-      
-      // If transaction failed, continue to next potential match
+      return true;
+    });
+
+    if (success) {
+      await _createGameRoomAndFinalize(
+        ticket.uid,
+        opponentUid,
+        ticket.categoryId,
+        ticket.categoryName,
+      );
     }
   }
 
+  DateTime? _parseDate(dynamic value) {
+    if (value == null) return null;
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    return DateTime.tryParse(value.toString());
+  }
+
   Future<void> _createGameRoomAndFinalize(
-    String hostUid, 
-    String guestUid, 
+    String hostUid,
+    String guestUid,
     int? categoryId,
     String categoryName,
   ) async {
     final roomId = _db.collection('gameRooms').doc().id;
 
-    // 1. Fetch questions
     List<Map<String, dynamic>> questions = [];
     try {
-      final response = await _dio.get(ApiConstants.triviaUrlForCategory(categoryId));
-      questions = (response.data['results'] as List).map((q) => {
-        'question': GameUtils.decodeHtmlEntities(q['question']),
-        'correct_answer': GameUtils.decodeHtmlEntities(q['correct_answer']),
-        'incorrect_answers': (q['incorrect_answers'] as List)
-            .map((a) => GameUtils.decodeHtmlEntities(a))
-            .toList(),
-      }).toList();
+      final response = await _dio.get(
+        ApiConstants.triviaUrlForCategory(categoryId),
+      );
+      questions = (response.data['results'] as List)
+          .map(
+            (q) => {
+              'question': GameUtils.decodeHtmlEntities(q['question']),
+              'correct_answer':
+                  GameUtils.decodeHtmlEntities(q['correct_answer']),
+              'incorrect_answers': (q['incorrect_answers'] as List)
+                  .map((a) => GameUtils.decodeHtmlEntities(a))
+                  .toList(),
+            },
+          )
+          .toList();
     } catch (e) {
-      print("Trivia API Error: $e");
+      debugPrint('Trivia API Error: $e');
       questions = GameUtils.getFallbackQuestions();
     }
 
-    // 2. Get both tickets to build room data
     final hostSnap = await _db.collection('matchmaking').doc(hostUid).get();
     final guestSnap = await _db.collection('matchmaking').doc(guestUid).get();
 
     if (!hostSnap.exists || !guestSnap.exists) return;
 
-    // 3. Create the room
     await _db.collection('gameRooms').doc(roomId).set({
       'roomId': roomId,
       'roomCode': '',
       'categoryId': categoryId,
       'categoryName': categoryName,
       'status': 'waiting',
-      'player1': {...hostSnap.data()!, 'isReady': false, 'score': 0, 'answers': []},
-      'player2': {...guestSnap.data()!, 'isReady': false, 'score': 0, 'answers': []},
+      'isRanked': true,
+      'player1': {
+        ...hostSnap.data()!,
+        'isReady': false,
+        'score': 0,
+        'answers': [],
+      },
+      'player2': {
+        ...guestSnap.data()!,
+        'isReady': false,
+        'score': 0,
+        'answers': [],
+      },
       'createdAt': FieldValue.serverTimestamp(),
       'questions': questions,
     });
 
-    // 4. Update both tickets to 'matched' with the real roomId
     final batch = _db.batch();
     batch.update(_db.collection('matchmaking').doc(hostUid), {
       'status': 'matched',
+      'matchedWith': guestUid,
       'gameRoomId': roomId,
     });
     batch.update(_db.collection('matchmaking').doc(guestUid), {
       'status': 'matched',
+      'matchedWith': hostUid,
       'gameRoomId': roomId,
     });
     await batch.commit();
   }
 
-  // Cancel searching
+  // Cancel searching.
   Future<void> cancelSearching(String uid) async {
     await _db.collection('matchmaking').doc(uid).delete();
   }
 
-  // Listen to the matchmaking ticket
+  // Listen to the matchmaking ticket.
   Stream<MatchmakingModel?> watchTicket(String uid) {
     return _db.collection('matchmaking').doc(uid).snapshots().map((doc) {
       if (!doc.exists || doc.data() == null) return null;
@@ -158,22 +227,20 @@ class MatchmakingRepository {
     });
   }
 
-  /// Updates the ticket's lastSeen and periodically attempts to find a match 
+  /// Updates the ticket's lastSeen and periodically attempts to find a match
   /// if the ticket hasn't been matched yet.
   Future<void> pingMatchmaking(String uid) async {
     final ticketRef = _db.collection('matchmaking').doc(uid);
     final snap = await ticketRef.get();
-    
+
     if (!snap.exists) return;
-    
+
     final data = snap.data()!;
     if (data['status'] != 'searching') return;
 
-    // Update lastSeen
     await ticketRef.update({'lastSeen': FieldValue.serverTimestamp()});
 
-    // Re-trigger searching logic
     final ticket = MatchmakingModel.fromJson(data);
-    await startSearching(ticket);
+    await _tryMatch(ticket);
   }
 }

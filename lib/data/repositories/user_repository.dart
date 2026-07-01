@@ -1,6 +1,3 @@
-// WHAT THIS FILE DOES:
-// Manages player profile data logic with detailed error reporting.
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/errors/app_error.dart';
 import '../../core/errors/result.dart';
@@ -11,6 +8,7 @@ import '../services/firestore_service.dart';
 import '../services/xp_service.dart';
 import '../services/rank_service.dart';
 import '../../core/utils/level_system.dart';
+import '../../core/utils/rank_system.dart';
 
 class UserRepository {
   final FirestoreService _service;
@@ -19,13 +17,9 @@ class UserRepository {
 
   Future<Result<void>> createUserProfile(UserModel user) async {
     try {
-      // Check if username is already taken
       final isAvailable = await _service.isUsernameAvailable(user.username);
-
       if (!isAvailable) {
-        return const Failure(
-          DatabaseError("Username already taken."),
-        );
+        return const Failure(DatabaseError("Username already taken."));
       }
 
       await _service.setData(
@@ -42,18 +36,10 @@ class UserRepository {
   Future<Result<UserModel>> getUserProfile(String uid) async {
     try {
       final doc = await _service.getDocument('users/$uid');
-
       if (doc.exists) {
-        return Success(
-          UserModel.fromJson(
-            doc.data() as Map<String, dynamic>,
-          ),
-        );
+        return Success(UserModel.fromJson(doc.data() as Map<String, dynamic>));
       }
-
-      return const Failure(
-        DatabaseError("User profile not found."),
-      );
+      return const Failure(DatabaseError("User profile not found."));
     } catch (e) {
       return Failure(DatabaseError(e.toString()));
     }
@@ -82,19 +68,22 @@ class UserRepository {
     });
   }
 
-  Future<void> deleteUserProfile(String uid) async {
-    await FirebaseFirestore.instance.collection('users').doc(uid).delete();
+  Future<void> updateAvatarUrl(String uid, String avatarUrl) async {
+    await _service.setData(
+      path: 'users/$uid',
+      data: {'avatarUrl': avatarUrl},
+    );
   }
 
-  /// Processes match rewards and updates user stats transactionally.
   Future<MatchEndResult?> processMatchEnd({
     required String uid,
     required bool isWin,
-    required bool isDraw,
+    bool isDraw = false,
     required int correctAnswers,
     required int totalQuestions,
     required int coinsGained,
     bool isArenaBreakerWin = false,
+    bool isRanked = true,
   }) async {
     final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
     MatchEndResult? result;
@@ -106,6 +95,7 @@ class UserRepository {
       final userData = snapshot.data()!;
       final user = UserModel.fromJson(userData);
 
+      // 1. Calculate XP Rewards
       final xpRewards = XpService.calculateMatchRewards(
         user: user,
         isWin: isWin,
@@ -114,37 +104,67 @@ class UserRepository {
         totalQuestions: totalQuestions,
       );
 
-      final wrongAnswers = totalQuestions - correctAnswers;
-      final rankUpdate = RankService.calculateRankUpdate(
-        user: user,
-        correctAnswers: correctAnswers,
-        wrongAnswers: wrongAnswers,
-      );
+      // 2. Handle ELO and Rank (Only for Ranked Matches)
+      int newElo = user.eloRating;
+      String newRank = user.rank;
+      int? newSubRank = user.subRank;
+      int newRankPoints = user.rankPoints;
+      bool promoted = false;
+      bool demoted = false;
+      int pointsGained = 0;
 
-      final xpGained = xpRewards.total;
-      final totalXp = user.xp + xpGained;
+      if (isRanked) {
+        if (!isDraw) {
+          final eloChange = isWin ? 20 : -20;
+          newElo = (user.eloRating + eloChange).clamp(0, 5000);
+          newRank = RankSystem.getRankFromElo(newElo);
+          promoted = RankSystem.ranks.indexOf(newRank) >
+              RankSystem.ranks.indexOf(user.rank);
+          demoted = RankSystem.ranks.indexOf(newRank) <
+              RankSystem.ranks.indexOf(user.rank);
+
+          // Clear subrank if we move to the new system, or keep it for legacy UI?
+          // User said "Preserve existing UI", but the new system doesn't mention subranks.
+          // I'll keep subrank null for the new ELO system to indicate it's simplified.
+          newSubRank = null;
+        }
+      } else {
+        // Legacy/Existing Rank System for non-ranked modes (like Private Duel if it was allowed)
+        // But user said: "Private Duel and Practice Mode: Do not use ELO. Do not update ELO after these matches."
+        // And "Ranked Match only: Winner gains +20 ELO..."
+
+        final wrongAnswers = totalQuestions - correctAnswers;
+        final rankUpdate = RankService.calculateRankUpdate(
+          user: user,
+          correctAnswers: correctAnswers,
+          wrongAnswers: wrongAnswers,
+        );
+        newRank = rankUpdate.newRank;
+        newSubRank = rankUpdate.newSubRank;
+        newRankPoints = rankUpdate.newPoints;
+        promoted = rankUpdate.promoted;
+        demoted = rankUpdate.demoted;
+        pointsGained = rankUpdate.pointsGained;
+      }
+
+      final totalXp = user.xp + xpRewards.total;
       final newLevel = LevelSystem.getCurrentLevel(totalXp);
-      
-      final wins = user.wins + (isWin ? 1 : 0);
-      final losses = user.losses + (!isWin && !isDraw ? 1 : 0);
-      final draws = user.draws + (isDraw ? 1 : 0);
-      final matchesPlayed = user.matchesPlayed + 1;
-      
+
       final currentWinStreak = isWin ? user.currentWinStreak + 1 : 0;
-      final highestWinStreak = currentWinStreak > user.highestWinStreak 
-          ? currentWinStreak 
+      final highestWinStreak = currentWinStreak > user.highestWinStreak
+          ? currentWinStreak
           : user.highestWinStreak;
 
-      final lastDailyBonusDate = xpRewards.dailyBonusXp > 0 
-          ? DateTime.now() 
-          : user.lastDailyBonusDate;
+      final lastDailyBonusDate =
+          xpRewards.dailyBonusXp > 0 ? DateTime.now() : user.lastDailyBonusDate;
 
       // Achievements Logic
       final achievements = List<String>.from(userData['achievements'] ?? []);
       if (isWin && !achievements.contains('first_win')) {
         achievements.add('first_win');
       }
-      if (wins >= 10 && !achievements.contains('veteran')) {
+      final totalWins = user.wins + (isWin ? 1 : 0);
+      if (totalWins >= 10 && !achievements.contains('veteran')) {
         achievements.add('veteran');
       }
 
@@ -153,7 +173,9 @@ class UserRepository {
       if (isArenaBreakerWin) {
         if (isWin) {
           abWins++;
-          if (!achievements.contains('arena_breaker')) achievements.add('arena_breaker');
+          if (!achievements.contains('arena_breaker')) {
+            achievements.add('arena_breaker');
+          }
         } else {
           abLosses++;
         }
@@ -169,16 +191,19 @@ class UserRepository {
         'xp': totalXp,
         'level': newLevel,
         'coins': user.coins + coinsGained,
-        'wins': wins,
-        'losses': losses,
-        'draws': draws,
-        'matchesPlayed': matchesPlayed,
+        'wins': totalWins,
+        'losses': user.losses + (!isWin && !isDraw ? 1 : 0),
+        'draws': user.draws + (isDraw ? 1 : 0),
+        'matchesPlayed': user.matchesPlayed + 1,
+        'eloRating': newElo,
         'currentWinStreak': currentWinStreak,
         'highestWinStreak': highestWinStreak,
-        'lastDailyBonusDate': lastDailyBonusDate != null ? Timestamp.fromDate(lastDailyBonusDate) : null,
-        'rank': rankUpdate.newRank,
-        'subRank': rankUpdate.newSubRank,
-        'rankPoints': rankUpdate.newPoints,
+        'lastDailyBonusDate': lastDailyBonusDate != null
+            ? Timestamp.fromDate(lastDailyBonusDate)
+            : null,
+        'rank': newRank,
+        'subRank': newSubRank,
+        'rankPoints': newRankPoints,
         'achievements': achievements,
         'arenaBreakerWins': abWins,
         'arenaBreakerLosses': abLosses,
@@ -186,14 +211,25 @@ class UserRepository {
 
       result = MatchEndResult(
         xpRewards: xpRewards,
-        rankUpdate: rankUpdate,
+        rankUpdate: RankUpdateResult(
+          oldRank: user.rank,
+          oldSubRank: user.subRank,
+          oldPoints: user.rankPoints,
+          newRank: newRank,
+          newSubRank: newSubRank,
+          newPoints: newRankPoints,
+          pointsGained:
+              isRanked ? (isWin ? 20 : (isDraw ? 0 : -20)) : pointsGained,
+          promoted: promoted,
+          demoted: demoted,
+        ),
       );
     });
 
     return result;
   }
 
-  // Deprecated: use processMatchEnd instead
+  // Backward compatibility
   Future<void> updateUserStats({
     required String uid,
     required int xpGained,
@@ -201,7 +237,6 @@ class UserRepository {
     required bool isWin,
     bool isArenaBreakerWin = false,
   }) async {
-    // Forwarding to processMatchEnd with defaults for backward compatibility
     await processMatchEnd(
       uid: uid,
       isWin: isWin,
@@ -213,29 +248,26 @@ class UserRepository {
     );
   }
 
-  Future<void> saveMatchHistory(String uid, MatchHistoryModel history) async {
+  Future<void> saveMatchHistory(String uid, MatchModel history) async {
     await FirebaseFirestore.instance
         .collection('users')
         .doc(uid)
         .collection('matchHistory')
-        .doc(history.matchId)
+        .doc(history.id)
         .set(history.toJson());
   }
 
-  Stream<List<MatchHistoryModel>> watchMatchHistory(String uid) {
+  Stream<List<MatchModel>> watchMatchHistory(String uid) {
     return FirebaseFirestore.instance
         .collection('users')
         .doc(uid)
         .collection('matchHistory')
-        // Temporarily removed orderBy to check if it's an index issue
-        .limit(10)
+        .limit(20)
         .snapshots()
         .map((snapshot) {
-      final history = snapshot.docs
-          .map((doc) => MatchHistoryModel.fromJson(doc.data()))
-          .toList();
-      // Sort manually in Dart to avoid index requirements during debug
-      history.sort((a, b) => b.playedAt.compareTo(a.playedAt));
+      final history =
+          snapshot.docs.map((doc) => MatchModel.fromJson(doc.data())).toList();
+      history.sort((a, b) => b.timestamp.compareTo(a.timestamp));
       return history;
     });
   }
