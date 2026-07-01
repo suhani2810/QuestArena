@@ -35,6 +35,9 @@ class _GameScreenState extends ConsumerState<GameScreen>
   String? _lastABQuestionText;
   int _lastABRound = 0;
   bool _hasUsedFiftyFifty = false;
+  bool _isActivatingShield = false;
+  bool _isRevealingTimeoutAnswer = false;
+  int? _timeoutRevealQuestionIndex;
 
   // Heartbeat & Timer state
   Timer? _heartbeatTimer;
@@ -107,8 +110,8 @@ class _GameScreenState extends ConsumerState<GameScreen>
             _handleTimeout();
           }
         }
-        // Force server to move to next Q if it hasn't yet (Driver role)
-        if (room.status == 'active') {
+        // After the reveal window, force server to move to next Q if it hasn't yet.
+        if (room.status == 'active' && !_isRevealingTimeoutAnswer) {
           ref.read(gameRepositoryProvider).forceAdvanceQuestion(widget.roomId, room.currentQuestionIndex);
         }
       } else {
@@ -126,7 +129,46 @@ class _GameScreenState extends ConsumerState<GameScreen>
 
   void _handleTimeout() async {
     if (_hasAnswered) return;
-    _onAnswerSelected("TIMEOUT");
+
+    final room = ref.read(gameRoomProvider(widget.roomId)).value;
+    if (room == null) return;
+
+    final timedOutIndex = room.currentQuestionIndex;
+
+    setState(() {
+      _selectedAnswer = "TIMEOUT";
+      _hasAnswered = true;
+      _isRevealingTimeoutAnswer = true;
+      _timeoutRevealQuestionIndex = timedOutIndex;
+    });
+
+    await Future.delayed(const Duration(seconds: 2));
+    if (!mounted) return;
+
+    final latestRoom = ref.read(gameRoomProvider(widget.roomId)).value;
+    if (latestRoom == null ||
+        latestRoom.status != 'active' ||
+        latestRoom.currentQuestionIndex != timedOutIndex) {
+      setState(() {
+        _isRevealingTimeoutAnswer = false;
+        _timeoutRevealQuestionIndex = null;
+      });
+      return;
+    }
+
+    await _submitAnswer("TIMEOUT");
+    if (!mounted) return;
+
+    await ref
+        .read(gameRepositoryProvider)
+        .forceAdvanceQuestion(widget.roomId, timedOutIndex);
+
+    if (mounted) {
+      setState(() {
+        _isRevealingTimeoutAnswer = false;
+        _timeoutRevealQuestionIndex = null;
+      });
+    }
   }
 
   void _onAnswerSelected(String answer) async {
@@ -138,6 +180,10 @@ class _GameScreenState extends ConsumerState<GameScreen>
     });
     _timerController.stop();
 
+    await _submitAnswer(answer);
+  }
+
+  Future<void> _submitAnswer(String answer) async {
     final room = ref.read(gameRoomProvider(widget.roomId)).value;
     final user = ref.read(currentUserProvider).value;
     if (room == null || user == null) return;
@@ -221,6 +267,8 @@ class _GameScreenState extends ConsumerState<GameScreen>
           _hasAnswered = false;
           _selectedAnswer = null;
           _fiftyFiftyHiddenOptions = [];
+          _isRevealingTimeoutAnswer = false;
+          _timeoutRevealQuestionIndex = null;
         });
         _syncState(); // Immediate sync for new Q
       }
@@ -353,6 +401,16 @@ class _GameScreenState extends ConsumerState<GameScreen>
                 ),
               ),
             ),
+            if (_isRevealingTimeoutAnswer &&
+                _timeoutRevealQuestionIndex == room.currentQuestionIndex)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  'Time up! Correct answer revealed.',
+                  style: AppTextStyles.label.copyWith(color: AppColors.gold),
+                  textAlign: TextAlign.center,
+                ).animate().fadeIn().shake(hz: 2),
+              ),
           ],
         ),
       ),
@@ -410,6 +468,20 @@ class _GameScreenState extends ConsumerState<GameScreen>
   }
 
   Widget _buildPowerups(GameRoomModel room) {
+    final user = ref.read(currentUserProvider).value;
+    final uid = user?.uid;
+    final shieldBlocks = Map<String, dynamic>.from(
+      room.powerups['shieldBonusBlocks'] ?? {},
+    );
+    final shieldState = uid == null
+        ? <String, dynamic>{}
+        : Map<String, dynamic>.from(shieldBlocks[uid] ?? {});
+    final hasUsedShield = shieldState.isNotEmpty;
+    final isShieldActiveThisQuestion =
+        shieldState['questionIndex'] == room.currentQuestionIndex;
+    final shieldUnlocked = _currentCorrectStreak(room) >= 2;
+    final opponentAlreadyAnswered = _opponentHasAnsweredCurrentQuestion(room);
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -419,6 +491,17 @@ class _GameScreenState extends ConsumerState<GameScreen>
           isUsed: _hasUsedFiftyFifty,
           isDisabled: _hasAnswered,
           onTap: () => _useFiftyFifty(room),
+        ),
+        const SizedBox(width: 12),
+        _PowerupButton(
+          label: isShieldActiveThisQuestion ? 'SHIELD ON' : 'SHIELD',
+          icon: Icons.shield_rounded,
+          isUsed: hasUsedShield,
+          isDisabled: !shieldUnlocked ||
+              _hasAnswered ||
+              opponentAlreadyAnswered ||
+              _isActivatingShield,
+          onTap: () => _useShield(room),
         ),
       ],
     );
@@ -489,6 +572,67 @@ class _GameScreenState extends ConsumerState<GameScreen>
       _hasUsedFiftyFifty = true;
       _fiftyFiftyHiddenOptions = wrong.take(2).toList();
     });
+  }
+
+  int _currentCorrectStreak(GameRoomModel room) {
+    final user = ref.read(currentUserProvider).value;
+    if (user == null) return 0;
+
+    final isP1 = user.uid == room.player1['uid'];
+    final player = isP1 ? room.player1 : room.player2;
+    final answers = List<String>.from(player?['answers'] ?? []);
+    final maxIndex = answers.length < room.questions.length
+        ? answers.length
+        : room.questions.length;
+
+    int streak = 0;
+    for (int i = maxIndex - 1; i >= 0; i--) {
+      final question = room.questions[i];
+      if (answers[i] == question['correct_answer']) {
+        streak++;
+      } else {
+        break;
+      }
+    }
+    return streak;
+  }
+
+  bool _opponentHasAnsweredCurrentQuestion(GameRoomModel room) {
+    final user = ref.read(currentUserProvider).value;
+    if (user == null) return false;
+
+    final isP1 = user.uid == room.player1['uid'];
+    final opponent = isP1 ? room.player2 : room.player1;
+    final answers = List<String>.from(opponent?['answers'] ?? []);
+    return answers.length > room.currentQuestionIndex;
+  }
+
+  void _useShield(GameRoomModel room) async {
+    final user = ref.read(currentUserProvider).value;
+    if (user == null ||
+        _hasAnswered ||
+        _isActivatingShield ||
+        _currentCorrectStreak(room) < 2 ||
+        _opponentHasAnsweredCurrentQuestion(room)) {
+      return;
+    }
+
+    setState(() => _isActivatingShield = true);
+    await ref.read(gameRepositoryProvider).activateShieldBonusBlock(
+          roomId: widget.roomId,
+          userId: user.uid,
+          questionIndex: room.currentQuestionIndex,
+        );
+
+    if (!mounted) return;
+    setState(() => _isActivatingShield = false);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Shield activated! Opponent bonus points blocked.'),
+        duration: Duration(seconds: 2),
+      ),
+    );
   }
 
   Widget _buildArenaBreakerRound(GameRoomModel room) {
@@ -624,6 +768,7 @@ class _PowerupButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final disabled = isUsed || isDisabled;
+    final buttonText = isUsed && label.endsWith('ON') ? label : (isUsed ? '$label USED' : label);
     return GestureDetector(
       onTap: disabled ? null : onTap,
       child: AnimatedOpacity(
@@ -641,7 +786,7 @@ class _PowerupButton extends StatelessWidget {
             children: [
               Icon(isUsed ? Icons.check_circle_rounded : icon, color: isUsed ? AppColors.textMuted : AppColors.purple, size: 18),
               const SizedBox(width: 8),
-              Text(isUsed ? '$label USED' : label, style: AppTextStyles.label.copyWith(color: isUsed ? AppColors.textMuted : Colors.white, fontWeight: FontWeight.bold)),
+              Text(buttonText, style: AppTextStyles.label.copyWith(color: isUsed ? AppColors.textMuted : Colors.white, fontWeight: FontWeight.bold)),
             ],
           ),
         ),
