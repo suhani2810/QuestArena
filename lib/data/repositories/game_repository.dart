@@ -151,7 +151,22 @@ class GameRepository {
       
       if (playerAnswers.length == currentIdx) {
         playerAnswers.add(answer);
-        final newScore = (data[playerKey]['score'] ?? 0) + scoreIncrement;
+        final player1 = data['player1'];
+        final player2 = data['player2'];
+        final opponentId = playerNumber == 1
+            ? (player2 == null ? null : player2['uid'])
+            : (player1 == null ? null : player1['uid']);
+        final powerups = Map<String, dynamic>.from(data['powerups'] ?? {});
+        final shieldBlocks = Map<String, dynamic>.from(
+          powerups['shieldBonusBlocks'] ?? {},
+        );
+        final opponentShield = opponentId == null
+            ? null
+            : Map<String, dynamic>.from(shieldBlocks[opponentId] ?? {});
+        final shieldBlocksBonus = opponentShield?['questionIndex'] == currentIdx;
+        final effectiveScore =
+            shieldBlocksBonus && scoreIncrement > 10 ? 10 : scoreIncrement;
+        final newScore = (data[playerKey]['score'] ?? 0) + effectiveScore;
 
         transaction.update(roomRef, {
           '$playerKey.answers': playerAnswers,
@@ -167,6 +182,40 @@ class GameRepository {
       if (p1Len > currentIdx && p2Len > currentIdx) {
         _advanceOrFinish(transaction, roomRef, data, currentIdx, questions);
       }
+    });
+  }
+
+  Future<void> activateShieldBonusBlock({
+    required String roomId,
+    required String userId,
+    required int questionIndex,
+  }) async {
+    final roomRef = _db.collection('gameRooms').doc(roomId);
+
+    await _db.runTransaction((transaction) async {
+      final snapshot = await transaction.get(roomRef);
+      if (!snapshot.exists) return;
+
+      final data = snapshot.data() as Map<String, dynamic>;
+      if (data['status'] != 'active') return;
+      if ((data['currentQuestionIndex'] ?? -1) != questionIndex) return;
+
+      final p1 = data['player1'];
+      final p2 = data['player2'];
+      if (p1?['uid'] != userId && p2?['uid'] != userId) return;
+
+      final powerups = Map<String, dynamic>.from(data['powerups'] ?? {});
+      final shieldBlocks = Map<String, dynamic>.from(
+        powerups['shieldBonusBlocks'] ?? {},
+      );
+      if (shieldBlocks.containsKey(userId)) return;
+
+      transaction.update(roomRef, {
+        'powerups.shieldBonusBlocks.$userId': {
+          'questionIndex': questionIndex,
+          'activatedAt': FieldValue.serverTimestamp(),
+        },
+      });
     });
   }
 

@@ -18,6 +18,7 @@ class GameRoomModel {
   final String? nextMatchId;
   final int? categoryId;
   final String categoryName;
+  final Map<String, dynamic> powerups;
   
   // Arena Breaker Fields
   final bool isArenaBreaker;
@@ -45,6 +46,7 @@ class GameRoomModel {
     this.nextMatchId,
     this.categoryId,
     this.categoryName = 'Mixed / Random',
+    this.powerups = const {},
     this.isArenaBreaker = false,
     this.arenaBreakerQuestion,
     this.arenaBreakerSubmissions = const {},
@@ -74,6 +76,7 @@ class GameRoomModel {
       nextMatchId: json['nextMatchId'],
       categoryId: json['categoryId'],
       categoryName: json['categoryName'] ?? 'Mixed / Random',
+      powerups: Map<String, dynamic>.from(json['powerups'] ?? {}),
       isArenaBreaker: json['isArenaBreaker'] ?? false,
       arenaBreakerQuestion: json['arenaBreakerQuestion'],
       arenaBreakerSubmissions: Map<String, dynamic>.from(json['arenaBreakerSubmissions'] ?? {}),
@@ -99,6 +102,7 @@ class GameRoomModel {
     'nextMatchId': nextMatchId,
     'categoryId': categoryId,
     'categoryName': categoryName,
+    'powerups': powerups,
     'isArenaBreaker': isArenaBreaker,
     'arenaBreakerQuestion': arenaBreakerQuestion,
     'arenaBreakerSubmissions': arenaBreakerSubmissions,
@@ -119,6 +123,7 @@ class GameRoomModel {
     Map<String, dynamic>? arenaBreakerQuestion,
     Map<String, dynamic>? arenaBreakerSubmissions,
     bool? isArenaBreakerWin,
+    Map<String, dynamic>? powerups,
   }) {
     return GameRoomModel(
       roomId: roomId,
@@ -135,6 +140,7 @@ class GameRoomModel {
       nextMatchId: nextMatchId,
       categoryId: categoryId,
       categoryName: categoryName,
+      powerups: powerups ?? this.powerups,
       isArenaBreaker: isArenaBreaker ?? this.isArenaBreaker,
       arenaBreakerQuestion: arenaBreakerQuestion ?? this.arenaBreakerQuestion,
       arenaBreakerSubmissions: arenaBreakerSubmissions ?? this.arenaBreakerSubmissions,

@@ -33,6 +33,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
   List<String> _fiftyFiftyHiddenOptions = [];
   int _lastQuestionIndex = -1;
   bool _hasUsedFiftyFifty = false;
+  bool _isActivatingShield = false;
   bool _isRevealingTimeoutAnswer = false;
   int? _timeoutRevealQuestionIndex;
 
@@ -429,6 +430,20 @@ class _GameScreenState extends ConsumerState<GameScreen>
   }
 
   Widget _buildPowerups(GameRoomModel room) {
+    final user = ref.read(currentUserProvider).value;
+    final uid = user?.uid;
+    final shieldBlocks = Map<String, dynamic>.from(
+      room.powerups['shieldBonusBlocks'] ?? {},
+    );
+    final shieldState = uid == null
+        ? <String, dynamic>{}
+        : Map<String, dynamic>.from(shieldBlocks[uid] ?? {});
+    final hasUsedShield = shieldState.isNotEmpty;
+    final isShieldActiveThisQuestion =
+        shieldState['questionIndex'] == room.currentQuestionIndex;
+    final shieldUnlocked = _currentCorrectStreak(room) >= 2;
+    final opponentAlreadyAnswered = _opponentHasAnsweredCurrentQuestion(room);
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -438,6 +453,17 @@ class _GameScreenState extends ConsumerState<GameScreen>
           isUsed: _hasUsedFiftyFifty,
           isDisabled: _hasAnswered,
           onTap: () => _useFiftyFifty(room),
+        ),
+        const SizedBox(width: 12),
+        _PowerupButton(
+          label: isShieldActiveThisQuestion ? 'SHIELD ON' : 'SHIELD',
+          icon: Icons.shield_rounded,
+          isUsed: hasUsedShield,
+          isDisabled: !shieldUnlocked ||
+              _hasAnswered ||
+              opponentAlreadyAnswered ||
+              _isActivatingShield,
+          onTap: () => _useShield(room),
         ),
       ],
     );
@@ -502,6 +528,67 @@ class _GameScreenState extends ConsumerState<GameScreen>
       _hasUsedFiftyFifty = true;
       _fiftyFiftyHiddenOptions = wrong.take(2).toList();
     });
+  }
+
+  int _currentCorrectStreak(GameRoomModel room) {
+    final user = ref.read(currentUserProvider).value;
+    if (user == null) return 0;
+
+    final isP1 = user.uid == room.player1['uid'];
+    final player = isP1 ? room.player1 : room.player2;
+    final answers = List<String>.from(player?['answers'] ?? []);
+    final maxIndex = answers.length < room.questions.length
+        ? answers.length
+        : room.questions.length;
+
+    int streak = 0;
+    for (int i = maxIndex - 1; i >= 0; i--) {
+      final question = room.questions[i];
+      if (answers[i] == question['correct_answer']) {
+        streak++;
+      } else {
+        break;
+      }
+    }
+    return streak;
+  }
+
+  bool _opponentHasAnsweredCurrentQuestion(GameRoomModel room) {
+    final user = ref.read(currentUserProvider).value;
+    if (user == null) return false;
+
+    final isP1 = user.uid == room.player1['uid'];
+    final opponent = isP1 ? room.player2 : room.player1;
+    final answers = List<String>.from(opponent?['answers'] ?? []);
+    return answers.length > room.currentQuestionIndex;
+  }
+
+  void _useShield(GameRoomModel room) async {
+    final user = ref.read(currentUserProvider).value;
+    if (user == null ||
+        _hasAnswered ||
+        _isActivatingShield ||
+        _currentCorrectStreak(room) < 2 ||
+        _opponentHasAnsweredCurrentQuestion(room)) {
+      return;
+    }
+
+    setState(() => _isActivatingShield = true);
+    await ref.read(gameRepositoryProvider).activateShieldBonusBlock(
+          roomId: widget.roomId,
+          userId: user.uid,
+          questionIndex: room.currentQuestionIndex,
+        );
+
+    if (!mounted) return;
+    setState(() => _isActivatingShield = false);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Shield activated! Opponent bonus points blocked.'),
+        duration: Duration(seconds: 2),
+      ),
+    );
   }
 
   Widget _buildArenaBreakerRound(GameRoomModel room) {
@@ -615,6 +702,7 @@ class _PowerupButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final disabled = isUsed || isDisabled;
+    final buttonText = isUsed && label.endsWith('ON') ? label : (isUsed ? '$label USED' : label);
     return GestureDetector(
       onTap: disabled ? null : onTap,
       child: AnimatedOpacity(
@@ -632,7 +720,7 @@ class _PowerupButton extends StatelessWidget {
             children: [
               Icon(isUsed ? Icons.check_circle_rounded : icon, color: isUsed ? AppColors.textMuted : AppColors.purple, size: 18),
               const SizedBox(width: 8),
-              Text(isUsed ? '$label USED' : label, style: AppTextStyles.label.copyWith(color: isUsed ? AppColors.textMuted : Colors.white, fontWeight: FontWeight.bold)),
+              Text(buttonText, style: AppTextStyles.label.copyWith(color: isUsed ? AppColors.textMuted : Colors.white, fontWeight: FontWeight.bold)),
             ],
           ),
         ),
