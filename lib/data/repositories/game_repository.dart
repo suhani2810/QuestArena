@@ -69,6 +69,7 @@ class GameRepository {
       'categoryId': category.id,
       'categoryName': category.name,
       'status': 'waiting',
+      'isRanked': false,
       'player1': {...player1Data, 'isReady': false, 'score': 0, 'answers': []},
       'player2': null,
       'createdAt': FieldValue.serverTimestamp(),
@@ -425,6 +426,7 @@ class GameRepository {
     required Map<String, dynamic> player2,
     required int? categoryId,
     required String categoryName,
+    bool isRanked = true,
   }) async {
     final newRoomId = _db.collection('gameRooms').doc().id;
     List<Map<String, dynamic>> questions = [];
@@ -454,6 +456,7 @@ class GameRepository {
       'categoryId': categoryId,
       'categoryName': categoryName,
       'status': 'active',
+      'isRanked': isRanked,
       'player1': resetPlayer(player1),
       'player2': resetPlayer(player2),
       'createdAt': FieldValue.serverTimestamp(),

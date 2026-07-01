@@ -18,6 +18,7 @@ class GameRoomModel {
   final String? nextMatchId;
   final int? categoryId;
   final String categoryName;
+  final bool isRanked;
   
   // Arena Breaker Fields
   final bool isArenaBreaker;
@@ -46,6 +47,7 @@ class GameRoomModel {
     this.nextMatchId,
     this.categoryId,
     this.categoryName = 'Mixed / Random',
+    this.isRanked = true,
     this.isArenaBreaker = false,
     this.arenaBreakerRound = 0,
     this.arenaBreakerQuestion,
@@ -76,6 +78,7 @@ class GameRoomModel {
       nextMatchId: json['nextMatchId'],
       categoryId: json['categoryId'],
       categoryName: json['categoryName'] ?? 'Mixed / Random',
+      isRanked: json['isRanked'] ?? true,
       isArenaBreaker: json['isArenaBreaker'] ?? false,
       arenaBreakerRound: json['arenaBreakerRound'] ?? 0,
       arenaBreakerQuestion: json['arenaBreakerQuestion'],
@@ -102,6 +105,7 @@ class GameRoomModel {
     'nextMatchId': nextMatchId,
     'categoryId': categoryId,
     'categoryName': categoryName,
+    'isRanked': isRanked,
     'isArenaBreaker': isArenaBreaker,
     'arenaBreakerRound': arenaBreakerRound,
     'arenaBreakerQuestion': arenaBreakerQuestion,
@@ -119,6 +123,7 @@ class GameRoomModel {
     int? currentQuestionIndex,
     DateTime? questionStartedAt,
     String? winnerId,
+    bool? isRanked,
     bool? isArenaBreaker,
     int? arenaBreakerRound,
     Map<String, dynamic>? arenaBreakerQuestion,
@@ -140,6 +145,7 @@ class GameRoomModel {
       nextMatchId: nextMatchId,
       categoryId: categoryId,
       categoryName: categoryName,
+      isRanked: isRanked ?? this.isRanked,
       isArenaBreaker: isArenaBreaker ?? this.isArenaBreaker,
       arenaBreakerRound: arenaBreakerRound ?? this.arenaBreakerRound,
       arenaBreakerQuestion: arenaBreakerQuestion ?? this.arenaBreakerQuestion,

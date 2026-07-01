@@ -198,6 +198,7 @@ class _DashboardTabState extends ConsumerState<DashboardTab> with TickerProvider
                         onTap: () async {
                           final category = await CategoryPickerSheet.show(context);
                           if (category == null || !context.mounted) return;
+
                           final ticket = MatchmakingModel(
                             uid: user.uid,
                             username: user.username,
@@ -205,6 +206,7 @@ class _DashboardTabState extends ConsumerState<DashboardTab> with TickerProvider
                             rank: user.rank,
                             categoryId: category.id,
                             categoryName: category.name,
+                            eloRating: user.eloRating,
                             searchStartedAt: DateTime.now(),
                           );
 
@@ -215,7 +217,7 @@ class _DashboardTabState extends ConsumerState<DashboardTab> with TickerProvider
                           if (context.mounted) {
                             Navigator.of(context).push(
                               MaterialPageRoute(
-                                builder: (_) => const MatchmakingScreen(),
+                                builder: (_) => MatchmakingScreen(categoryName: category.name),
                               ),
                             );
                           }

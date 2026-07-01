@@ -105,6 +105,7 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
         totalQuestions: totalQuestions,
         coinsGained: isWinner ? 20 : 5,
         isArenaBreakerWin: widget.room.isArenaBreakerWin,
+        isRanked: widget.room.isRanked,
       );
 
       final opponentScore = currentUser.uid == widget.room.player1['uid'] 
@@ -209,6 +210,7 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
               player2: room.player2!,
               categoryId: room.categoryId,
               categoryName: room.categoryName,
+              isRanked: room.isRanked,
             );
           }
         }

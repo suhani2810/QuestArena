@@ -2,27 +2,77 @@
 // Highly polished Animated UI for matchmaking.
 // Uses a radar-inspired design to maintain a high-tech "Gaming" feel.
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../core/constants/colors.dart';
+import '../../core/constants/text_styles.dart';
 import '../../core/theme/app_theme.dart';
 import '../../providers/matchmaking_providers.dart';
 import '../../providers/user_providers.dart';
 import '../widgets/smart_avatar.dart';
 import 'lobby_screen.dart';
 
-class MatchmakingScreen extends ConsumerWidget {
-  const MatchmakingScreen({super.key});
+class MatchmakingScreen extends ConsumerStatefulWidget {
+  final String? categoryName;
+  const MatchmakingScreen({super.key, this.categoryName});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MatchmakingScreen> createState() => _MatchmakingScreenState();
+}
+
+class _MatchmakingScreenState extends ConsumerState<MatchmakingScreen> {
+  Timer? _expansionTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _startExpansionTimer();
+  }
+
+  @override
+  void dispose() {
+    _expansionTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startExpansionTimer() {
+    _expansionTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      final user = ref.read(currentUserProvider).value;
+      if (user != null) {
+        ref.read(matchmakingRepositoryProvider).expandSearch(user.uid);
+      }
+    });
+  }
+
+  String _getCategoryIcon(String category) {
+    final lowerCategory = category.toLowerCase();
+    if (lowerCategory.contains('computers')) return '💻';
+    if (lowerCategory.contains('music')) return '🎵';
+    if (lowerCategory.contains('film')) return '🎬';
+    if (lowerCategory.contains('books')) return '📚';
+    if (lowerCategory.contains('geography')) return '🌍';
+    if (lowerCategory.contains('sports')) return '⚽';
+    if (lowerCategory.contains('mathematics')) return '🧮';
+    if (lowerCategory.contains('animals')) return '🐾';
+    if (lowerCategory.contains('video games')) return '🎮';
+    if (lowerCategory.contains('general knowledge')) return '📖';
+    return '🎲'; // Mixed / Random
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final user = ref.watch(currentUserProvider).value;
+    final ticket = ref.watch(matchmakingTicketProvider).value;
+
+    final displayCategory = ticket?.categoryName ?? widget.categoryName ?? 'Mixed / Random';
 
     // Navigation logic: Listen for the ticket to become 'matched'
     ref.listen(matchmakingTicketProvider, (previous, next) {
       final ticket = next.value;
       if (ticket != null && ticket.status == 'matched' && ticket.gameRoomId != null) {
+        _expansionTimer?.cancel();
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => LobbyScreen(roomId: ticket.gameRoomId!)),
         );
@@ -134,6 +184,50 @@ class MatchmakingScreen extends ConsumerWidget {
 
                 const SizedBox(height: 32),
 
+                // TOPIC SECTION
+                if (ticket != null || widget.categoryName != null) ...[
+                  const SizedBox(
+                    width: 160,
+                    child: Divider(color: AppColors.divider, thickness: 0.5),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'MATCH TOPIC',
+                    style: AppTextStyles.label.copyWith(
+                      fontSize: 9,
+                      color: AppColors.neonCyan.withValues(alpha: 0.6),
+                      letterSpacing: 4,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        _getCategoryIcon(displayCategory),
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        displayCategory.toUpperCase(),
+                        style: AppTextStyles.headline.copyWith(
+                          fontSize: 18,
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 2.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  const SizedBox(
+                    width: 160,
+                    child: Divider(color: AppColors.divider, thickness: 0.5),
+                  ),
+                  const SizedBox(height: 40),
+                ],
+
                 // Animated status messages
                 const DefaultTextStyle(
                   style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
@@ -152,6 +246,7 @@ class MatchmakingScreen extends ConsumerWidget {
               child: TextButton.icon(
                 onPressed: () async {
                   if (user != null) {
+                    _expansionTimer?.cancel();
                     await ref.read(matchmakingRepositoryProvider).cancelSearching(user.uid);
                     if (context.mounted) Navigator.pop(context);
                   }

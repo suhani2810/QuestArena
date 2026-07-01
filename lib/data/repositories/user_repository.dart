@@ -8,6 +8,7 @@ import '../services/firestore_service.dart';
 import '../services/xp_service.dart';
 import '../services/rank_service.dart';
 import '../../core/utils/level_system.dart';
+import '../../core/utils/rank_system.dart';
 
 class UserRepository {
   final FirestoreService _service;
@@ -82,6 +83,7 @@ class UserRepository {
     required int totalQuestions,
     required int coinsGained,
     bool isArenaBreakerWin = false,
+    bool isRanked = true,
   }) async {
     final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
     MatchEndResult? result;
@@ -93,6 +95,7 @@ class UserRepository {
       final userData = snapshot.data()!;
       final user = UserModel.fromJson(userData);
 
+      // 1. Calculate XP Rewards
       final xpRewards = XpService.calculateMatchRewards(
         user: user,
         isWin: isWin,
@@ -101,12 +104,46 @@ class UserRepository {
         totalQuestions: totalQuestions,
       );
 
-      final wrongAnswers = totalQuestions - correctAnswers;
-      final rankUpdate = RankService.calculateRankUpdate(
-        user: user,
-        correctAnswers: correctAnswers,
-        wrongAnswers: wrongAnswers,
-      );
+      // 2. Handle ELO and Rank (Only for Ranked Matches)
+      int newElo = user.eloRating;
+      String newRank = user.rank;
+      int? newSubRank = user.subRank;
+      int newRankPoints = user.rankPoints;
+      bool promoted = false;
+      bool demoted = false;
+      int pointsGained = 0;
+
+      if (isRanked) {
+        if (!isDraw) {
+          final eloChange = isWin ? 20 : -20;
+          newElo = (user.eloRating + eloChange).clamp(0, 5000);
+          newRank = RankSystem.getRankFromElo(newElo);
+          promoted = RankSystem.ranks.indexOf(newRank) > RankSystem.ranks.indexOf(user.rank);
+          demoted = RankSystem.ranks.indexOf(newRank) < RankSystem.ranks.indexOf(user.rank);
+          
+          // Clear subrank if we move to the new system, or keep it for legacy UI?
+          // User said "Preserve existing UI", but the new system doesn't mention subranks.
+          // I'll keep subrank null for the new ELO system to indicate it's simplified.
+          newSubRank = null; 
+        }
+      } else {
+        // Legacy/Existing Rank System for non-ranked modes (like Private Duel if it was allowed)
+        // But user said: "Private Duel and Practice Mode: Do not use ELO. Do not update ELO after these matches."
+        // And "Ranked Match only: Winner gains +20 ELO..."
+        
+        final wrongAnswers = totalQuestions - correctAnswers;
+        final rankUpdate = RankService.calculateRankUpdate(
+          user: user,
+          correctAnswers: correctAnswers,
+          wrongAnswers: wrongAnswers,
+        );
+        newRank = rankUpdate.newRank;
+        newSubRank = rankUpdate.newSubRank;
+        newRankPoints = rankUpdate.newPoints;
+        promoted = rankUpdate.promoted;
+        demoted = rankUpdate.demoted;
+        pointsGained = rankUpdate.pointsGained;
+      }
 
       final totalXp = user.xp + xpRewards.total;
       final newLevel = LevelSystem.getCurrentLevel(totalXp);
@@ -151,12 +188,13 @@ class UserRepository {
         'losses': user.losses + (!isWin && !isDraw ? 1 : 0),
         'draws': user.draws + (isDraw ? 1 : 0),
         'matchesPlayed': user.matchesPlayed + 1,
+        'eloRating': newElo,
         'currentWinStreak': currentWinStreak,
         'highestWinStreak': highestWinStreak,
         'lastDailyBonusDate': lastDailyBonusDate != null ? Timestamp.fromDate(lastDailyBonusDate) : null,
-        'rank': rankUpdate.newRank,
-        'subRank': rankUpdate.newSubRank,
-        'rankPoints': rankUpdate.newPoints,
+        'rank': newRank,
+        'subRank': newSubRank,
+        'rankPoints': newRankPoints,
         'achievements': achievements,
         'arenaBreakerWins': abWins,
         'arenaBreakerLosses': abLosses,
@@ -164,7 +202,17 @@ class UserRepository {
 
       result = MatchEndResult(
         xpRewards: xpRewards,
-        rankUpdate: rankUpdate,
+        rankUpdate: RankUpdateResult(
+          oldRank: user.rank,
+          oldSubRank: user.subRank,
+          oldPoints: user.rankPoints,
+          newRank: newRank,
+          newSubRank: newSubRank,
+          newPoints: newRankPoints,
+          pointsGained: isRanked ? (isWin ? 20 : (isDraw ? 0 : -20)) : pointsGained,
+          promoted: promoted,
+          demoted: demoted,
+        ),
       );
     });
 

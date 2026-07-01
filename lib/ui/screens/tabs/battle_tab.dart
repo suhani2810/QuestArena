@@ -38,11 +38,12 @@ class _BattleTabState extends ConsumerState<BattleTab> with TickerProviderStateM
         rank: user.rank,
         categoryId: category.id,
         categoryName: category.name,
+        eloRating: user.eloRating,
         searchStartedAt: DateTime.now(),
       );
       await ref.read(matchmakingRepositoryProvider).startSearching(ticket);
       if (mounted) {
-        Navigator.push(context, MaterialPageRoute(builder: (_) => const MatchmakingScreen()));
+        Navigator.push(context, MaterialPageRoute(builder: (_) => MatchmakingScreen(categoryName: category.name)));
       }
     } finally {
       if (mounted) setState(() => _isStartingMatch = false);
