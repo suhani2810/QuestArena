@@ -111,7 +111,7 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
           ? (widget.room.player2?['score'] ?? 0)
           : widget.room.player1['score'];
           
-          final opponentAvatar = currentUser.uid == widget.room.player1['uid']
+      final opponentAvatar = currentUser.uid == widget.room.player1['uid']
           ? (widget.room.player2?['avatarUrl'])
           : widget.room.player1['avatarUrl'];
 
@@ -122,7 +122,7 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
       final history = MatchModel(
         id: widget.room.roomId,
         opponentName: opponentName,
-        opponentAvatarUrl: opponentAvatar,
+        opponentAvatarUrl: opponentAvatar ?? 'f1', // Fallback to first character if missing
         playerScore: myScore,
         opponentScore: opponentScore,
         xpEarned: result?.xpRewards.total ?? 0,

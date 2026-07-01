@@ -47,7 +47,7 @@ class MatchModel {
     return MatchModel(
       id: json['matchId'] ?? json['id'] ?? '',
       opponentName: json['opponentName'] ?? 'Unknown',
-      opponentAvatarUrl: json['opponentAvatarUrl'],
+      opponentAvatarUrl: json['opponentAvatarUrl'] ?? json['opponentAvatar'] ?? json['avatarUrl'],
       playerScore: json['myScore'] ?? json['playerScore'] ?? 0,
       opponentScore: json['opponentScore'] ?? 0,
       xpEarned: json['xpGained'] ?? json['xpEarned'] ?? 0,

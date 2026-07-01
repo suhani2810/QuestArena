@@ -271,8 +271,9 @@ class _RecentHistorySection extends ConsumerWidget {
                     children: [
                       SmartAvatar(
                         avatarUrl: match.opponentAvatarUrl,
-                        size: 40,
-                        showBorder: false,
+                        size: 44,
+                        showBorder: true,
+                        showGlow: false,
                       ),
                       const SizedBox(width: 12),
                       Expanded(
