@@ -1,3 +1,6 @@
+// WHAT THIS FILE DOES:
+// Displays the player's detailed stats and achievements grid.
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/colors.dart';
@@ -6,9 +9,8 @@ import '../../../core/utils/rank_system.dart';
 import '../../../providers/user_providers.dart';
 import '../../../providers/auth_providers.dart';
 import '../../../providers/leaderboard_providers.dart';
-import '../../widgets/character_avatar.dart';
-import '../../widgets/xp_progress_bar.dart';
 import '../../widgets/rank_progress_bar.dart';
+import '../../widgets/xp_progress_bar.dart';
 import '../../widgets/neon_swirl_background.dart';
 import '../../widgets/smart_avatar.dart';
 import '../character_select_screen.dart';
@@ -59,27 +61,99 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with SingleTickerProvid
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: AppColors.bgCard,
-        title: const Text('Delete Account?', style: TextStyle(color: Colors.white)),
+        backgroundColor: AppColors.cardBg,
+        title: Text('DELETE ACCOUNT?', style: AppTextStyles.headline.copyWith(color: AppColors.red)),
         content: const Text(
-          'This action is permanent and will delete all your progress, ranks, and coins.',
+          'This action is permanent. All your XP, coins, and achievements will be lost forever.',
           style: TextStyle(color: AppColors.textSecondary),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('CANCEL'),
+            child: Text('CANCEL', style: AppTextStyles.label),
           ),
           ElevatedButton(
             onPressed: () async {
-              // Implementation of delete account would go here
-              Navigator.pop(context);
+              Navigator.pop(context); // Close dialog
+              await ref.read(userRepositoryProvider).deleteUserProfile(uid);
+              await ref.read(authRepositoryProvider).deleteAccount();
             },
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.red),
-            child: const Text('DELETE', style: TextStyle(color: Colors.white)),
+            child: const Text('DELETE', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
+    );
+  }
+
+  void _showAllAchievements(BuildContext context, List<String> unlockedIds, List<Map<String, dynamic>> all) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.primaryBg,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+      ),
+      builder: (context) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.7,
+          minChildSize: 0.5,
+          maxChildSize: 0.95,
+          expand: false,
+          builder: (context, scrollController) {
+            return Column(
+              children: [
+                const SizedBox(height: 12),
+                Container(width: 40, height: 4, decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(2))),
+                Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text('ALL ACHIEVEMENTS', style: AppTextStyles.headline.copyWith(fontSize: 20)),
+                ),
+                Expanded(
+                  child: GridView.builder(
+                    controller: scrollController,
+                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      crossAxisSpacing: 16,
+                      mainAxisSpacing: 16,
+                      childAspectRatio: 1.1,
+                    ),
+                    itemCount: all.length,
+                    itemBuilder: (context, index) {
+                      final a = all[index];
+                      final isUnlocked = unlockedIds.contains(a['id']);
+                      return Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: isUnlocked ? AppColors.cardBg : AppColors.cardBg.withValues(alpha: 0.3),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: isUnlocked ? AppColors.gold.withValues(alpha: 0.5) : AppColors.surface),
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(a['icon'] as IconData, color: isUnlocked ? AppColors.gold : AppColors.textMuted, size: 32),
+                            const SizedBox(height: 12),
+                            Text(
+                              a['name'] as String,
+                              style: AppTextStyles.bodyMd.copyWith(
+                                color: isUnlocked ? Colors.white : AppColors.textMuted,
+                                fontWeight: isUnlocked ? FontWeight.bold : FontWeight.normal,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -92,40 +166,30 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with SingleTickerProvid
       loading: () => const Center(child: CircularProgressIndicator(color: AppColors.gold)),
       error: (e, s) => Center(child: Text('Error: $e')),
       data: (user) {
-        if (user == null) {
-          return const Center(child: Text('User profile not found.'));
-        }
+        if (user == null) return const Center(child: Text('User not found'));
 
         final isMvp = weeklyMvp?.uid == user.uid;
-        final winRate = user.matchesPlayed > 0 
-            ? (user.wins / user.matchesPlayed * 100).toStringAsFixed(1)
-            : '0';
 
         final allAchievements = [
           {'id': 'first_win', 'name': 'First Blood', 'desc': 'Win your first match', 'icon': Icons.flash_on_rounded},
           {'id': 'on_fire', 'name': 'On Fire', 'desc': 'Win 3 games in a row', 'icon': Icons.whatshot},
           {'id': 'veteran', 'name': 'Veteran', 'desc': 'Win 10 matches', 'icon': Icons.military_tech},
           {'id': 'scholar', 'name': 'Scholar', 'desc': 'Get 10/10 in one match', 'icon': Icons.school},
+          {'id': 'arena_breaker', 'name': 'Arena Breaker', 'desc': 'Win a match against a higher rank', 'icon': Icons.security},
+          {'id': 'clutch_master', 'name': 'Clutch Master', 'desc': 'Win in the final seconds', 'icon': Icons.timer},
+          {'id': 'unbreakable', 'name': 'Unbreakable', 'desc': 'Reach a 10 match win streak', 'icon': Icons.shield},
         ];
 
-        final character = kCharacters.firstWhere(
-          (c) => c.id == (user.avatarUrl ?? ''),
-          orElse: () => kCharacters.first,
-        );
-
         return Scaffold(
-          backgroundColor: AppColors.bgBase,
+          backgroundColor: Colors.transparent,
           appBar: AppBar(
-            title: const Text('PLAYER PROFILE',
-                style: TextStyle(
-                    letterSpacing: 3,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 18)),
+            title: Text('PLAYER PROFILE', style: AppTextStyles.display.copyWith(fontSize: 18)),
             backgroundColor: Colors.transparent,
             elevation: 0,
+            centerTitle: true,
             actions: [
               IconButton(
-                icon: const Icon(Icons.logout_rounded, color: AppColors.neonPink),
+                icon: const Icon(Icons.logout_rounded, color: AppColors.red),
                 onPressed: () => ref.read(authRepositoryProvider).logout(),
               ),
             ],
@@ -142,63 +206,56 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with SingleTickerProvid
                     children: [
                       // Header
                       Stack(
+                        alignment: Alignment.bottomRight,
                         children: [
-                          SmartAvatar(
-                            avatarUrl: user.avatarUrl,
-                            size: 100,
-                            showGlow: true,
-                            showBorder: true,
-                          ),
-                          Positioned(
-                            right: 0,
-                            bottom: 0,
-                            child: GestureDetector(
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => CharacterSelectScreen(
-                                      username: user.username,
-                                      onConfirm: (selected) async {
-                                        await ref
-                                            .read(userRepositoryProvider)
-                                            .updateAvatarUrl(user.uid, selected.id);
-                                        if (context.mounted) Navigator.pop(context);
-                                      },
-                                    ),
+                          GestureDetector(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => CharacterSelectScreen(
+                                    username: user.username,
+                                    onConfirm: (selected) async {
+                                      await ref.read(userRepositoryProvider).updateAvatarUrl(user.uid, selected.id);
+                                      if (context.mounted) Navigator.pop(context);
+                                    },
                                   ),
-                                );
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: const BoxDecoration(
-                                  color: AppColors.neonViolet,
-                                  shape: BoxShape.circle,
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: AppColors.glowViolet,
-                                      blurRadius: 8,
-                                    )
-                                  ],
                                 ),
-                                child: const Icon(
-                                  Icons.edit_rounded,
-                                  size: 18,
-                                  color: Colors.white,
+                              );
+                            },
+                            child: Stack(
+                              children: [
+                                SmartAvatar(
+                                  avatarUrl: user.avatarUrl,
+                                  size: 100,
+                                  showGlow: true,
+                                  showBorder: true,
                                 ),
-                              ),
+                                Positioned(
+                                  right: 0,
+                                  bottom: 0,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(6),
+                                    decoration: const BoxDecoration(
+                                      color: AppColors.neonViolet,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(Icons.edit_rounded, size: 14, color: Colors.white),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       ),
-                      
+
                       const SizedBox(height: 16),
                       Text(user.username, style: AppTextStyles.headline),
                       Text(
                         RankSystem.getRankName(user.rank, user.subRank),
                         style: AppTextStyles.label.copyWith(color: AppColors.gold, fontWeight: FontWeight.bold),
                       ),
-                      
+
                       if (isMvp) ...[
                         const SizedBox(height: 12),
                         Container(
@@ -214,10 +271,10 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with SingleTickerProvid
                               const Icon(Icons.workspace_premium_rounded, color: AppColors.gold, size: 16),
                               const SizedBox(width: 8),
                               Text(
-                                'MVP HOLDER', 
+                                'MVP HOLDER',
                                 style: AppTextStyles.label.copyWith(
-                                  color: AppColors.gold, 
-                                  fontSize: 11, 
+                                  color: AppColors.gold,
+                                  fontSize: 11,
                                   fontWeight: FontWeight.w900,
                                   letterSpacing: 1.2,
                                 ),
@@ -226,9 +283,9 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with SingleTickerProvid
                           ),
                         ),
                       ],
-                      
+
                       const SizedBox(height: 32),
-                      
+
                       // Main Stats Row
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -240,19 +297,30 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with SingleTickerProvid
                         ],
                       ),
 
-                      const SizedBox(height: 40),
-                      
-                      // Progress Bars
-                      XpProgressBar(totalXp: user.xp),
-                      
-                      if (user.rank != 'Legend' && user.rank != 'Unranked') ...[
-                        const SizedBox(height: 24),
-                        RankProgressBar(rank: user.rank, subRank: user.subRank, points: user.rankPoints),
-                      ],
-
                       const SizedBox(height: 32),
+
+                      // XP & Rank Progress
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: AppColors.cardBg,
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(color: AppColors.surface),
+                        ),
+                        child: Column(
+                          children: [
+                            XpProgressBar(totalXp: user.xp),
+                            if (user.rank != 'Legend' && user.rank != 'Unranked') ...[
+                              const SizedBox(height: 20),
+                              RankProgressBar(rank: user.rank, subRank: user.subRank, points: user.rankPoints),
+                            ],
+                          ],
+                        ),
+                      ),
                       
-                      // Detailed Stats Summary
+                      const SizedBox(height: 32),
+
+                      // Statistics Card
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
@@ -263,20 +331,23 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with SingleTickerProvid
                         child: Column(
                           children: [
                             Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              mainAxisAlignment: MainAxisAlignment.spaceAround,
                               children: [
-                                _StatItem(label: 'MATCHES', value: '${user.matchesPlayed}'),
-                                _StatItem(label: 'WIN RATE', value: '$winRate%'),
-                                _StatItem(label: 'LEVEL', value: '${user.level}'),
+                                _ProfileStatItem(label: 'MATCHES', value: '${user.matchesPlayed}'),
+                                _ProfileStatItem(label: 'WIN RATE', value: '${user.winRate.toStringAsFixed(0)}%'),
+                                _ProfileStatItem(label: 'LEVEL', value: '${user.level}'),
                               ],
                             ),
-                            const Divider(color: AppColors.surface, height: 32),
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 16),
+                              child: Divider(color: AppColors.surface, height: 1),
+                            ),
                             Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              mainAxisAlignment: MainAxisAlignment.spaceAround,
                               children: [
-                                _StatItem(label: 'LOSSES', value: '${user.losses}'),
-                                _StatItem(label: 'DRAWS', value: '${user.draws}'),
-                                _StatItem(label: 'BEST STREAK', value: '${user.highestWinStreak}'),
+                                _ProfileStatItem(label: 'LOSSES', value: '${user.losses}'),
+                                _ProfileStatItem(label: 'DRAWS', value: '${user.draws}'),
+                                _ProfileStatItem(label: 'BEST STREAK', value: '${user.highestWinStreak}'),
                               ],
                             ),
                           ],
@@ -285,59 +356,46 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with SingleTickerProvid
 
                       const SizedBox(height: 32),
 
-                      // Achievement Grid
-                      const Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text('ACHIEVEMENTS', style: TextStyle(color: AppColors.textMuted, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 2)),
+                      // Achievements Section
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('ACHIEVEMENTS', style: AppTextStyles.label.copyWith(fontSize: 10, letterSpacing: 1, color: AppColors.textMuted)),
+                          TextButton(
+                            onPressed: () => _showAllAchievements(context, user.achievements, allAchievements),
+                            child: Text('VIEW ALL', style: AppTextStyles.label.copyWith(color: AppColors.gold, fontSize: 10)),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 16),
-                      GridView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                          childAspectRatio: 1.5,
+                      const SizedBox(height: 8),
+                      if (user.achievements.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 20),
+                          child: Text('No achievements unlocked yet', style: AppTextStyles.bodyMd.copyWith(color: AppColors.textMuted)),
+                        )
+                      else
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: allAchievements.where((a) => user.achievements.contains(a['id'])).map((achievement) {
+                              return _AchievementChip(
+                                icon: achievement['icon'] as IconData,
+                                name: achievement['name'] as String,
+                              );
+                            }).toList(),
+                          ),
                         ),
-                        itemCount: allAchievements.length,
-                        itemBuilder: (context, index) {
-                          final achievement = allAchievements[index];
-                          final isUnlocked = user.achievements.contains(achievement['id']);
-
-                          return Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: isUnlocked
-                                  ? AppColors.cardBg
-                                  : AppColors.cardBg.withValues(alpha: 0.3),
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                  color: isUnlocked ? AppColors.gold.withValues(alpha: 0.5) : AppColors.surface),
-                            ),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  achievement['icon'] as IconData,
-                                  color: isUnlocked ? AppColors.gold : AppColors.textMuted,
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  achievement['name'] as String,
-                                  style: AppTextStyles.bodyMd.copyWith(
-                                    fontSize: 14,
-                                    color: isUnlocked ? AppColors.textPrimary : AppColors.textMuted,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
 
                       const SizedBox(height: 48),
 
+                      // Delete Account Button
                       TextButton.icon(
                         onPressed: () => _showDeleteConfirmation(context, ref, user.uid),
                         icon: const Icon(Icons.delete_forever_rounded, color: AppColors.red, size: 20),
@@ -380,20 +438,45 @@ class _ProfileStat extends StatelessWidget {
   }
 }
 
-class _StatItem extends StatelessWidget {
+class _ProfileStatItem extends StatelessWidget {
   final String label;
   final String value;
-
-  const _StatItem({required this.label, required this.value});
+  const _ProfileStatItem({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Text(value, style: AppTextStyles.headline.copyWith(fontSize: 18)),
+        Text(value, style: AppTextStyles.headline.copyWith(fontSize: 20)),
         const SizedBox(height: 4),
         Text(label, style: AppTextStyles.label.copyWith(fontSize: 9, color: AppColors.textSecondary)),
       ],
+    );
+  }
+}
+
+class _AchievementChip extends StatelessWidget {
+  final IconData icon;
+  final String name;
+  const _AchievementChip({required this.icon, required this.name});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.gold.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.gold.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: AppColors.gold, size: 14),
+          const SizedBox(width: 8),
+          Text(name.toUpperCase(), style: AppTextStyles.label.copyWith(color: AppColors.gold, fontSize: 9, fontWeight: FontWeight.bold)),
+        ],
+      ),
     );
   }
 }

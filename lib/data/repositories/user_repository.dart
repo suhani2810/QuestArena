@@ -1,5 +1,4 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart';
 import '../../core/errors/app_error.dart';
 import '../../core/errors/result.dart';
 import '../models/user_model.dart';
@@ -75,14 +74,27 @@ class UserRepository {
     );
   }
 
+  Future<void> deleteUserProfile(String uid) async {
+    await FirebaseFirestore.instance.collection('users').doc(uid).delete();
+  }
+
+  Future<void> deleteMatchHistory(String uid, String matchId) async {
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('matchHistory')
+        .doc(matchId)
+        .delete();
+  }
+
   Future<MatchEndResult?> processMatchEnd({
     required String uid,
     required bool isWin,
-    bool isDraw = false,
-    bool isArenaBreakerWin = false,
+    required bool isDraw,
     required int correctAnswers,
     required int totalQuestions,
     required int coinsGained,
+    bool isArenaBreakerWin = false,
   }) async {
     final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
     MatchEndResult? result;
@@ -111,15 +123,38 @@ class UserRepository {
 
       final totalXp = user.xp + xpRewards.total;
       final newLevel = LevelSystem.getCurrentLevel(totalXp);
-      
-      final currentWinStreak = isWin ? user.currentWinStreak + 1 : 0;
-      final highestWinStreak = currentWinStreak > user.highestWinStreak 
-          ? currentWinStreak 
+
+      // Daily Return Streak logic
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      int currentStreak = user.currentWinStreak;
+
+      if (user.lastDailyBonusDate != null) {
+        final lastPlayed = DateTime(
+          user.lastDailyBonusDate!.year,
+          user.lastDailyBonusDate!.month,
+          user.lastDailyBonusDate!.day,
+        );
+        final diff = today.difference(lastPlayed).inDays;
+
+        if (diff == 1) {
+          // Returned on consecutive day
+          currentStreak++;
+        } else if (diff > 1) {
+          // Missed at least one day
+          currentStreak = 1;
+        }
+        // if diff == 0, already played today, streak remains same
+      } else {
+        // First match ever
+        currentStreak = 1;
+      }
+
+      final highestWinStreak = currentStreak > user.highestWinStreak 
+          ? currentStreak 
           : user.highestWinStreak;
 
-      final lastDailyBonusDate = xpRewards.dailyBonusXp > 0 
-          ? DateTime.now() 
-          : user.lastDailyBonusDate;
+      final lastDailyBonusDate = now; // Update last played date
 
       // Achievements
       final achievements = List<String>.from(user.achievements);
@@ -131,11 +166,25 @@ class UserRepository {
         achievements.add('veteran');
       }
 
-      final abWins = user.arenaBreakerWins + (isArenaBreakerWin && isWin ? 1 : 0);
-      final abLosses = user.arenaBreakerLosses + (isArenaBreakerWin && !isWin && !isDraw ? 1 : 0);
+      int abWins = user.arenaBreakerWins;
+      int abLosses = user.arenaBreakerLosses;
 
-      if (isArenaBreakerWin && isWin && !achievements.contains('arena_breaker')) {
-        achievements.add('arena_breaker');
+      if (isArenaBreakerWin) {
+        if (isWin) {
+          abWins++;
+          if (!achievements.contains('arena_breaker')) {
+            achievements.add('arena_breaker');
+          }
+        } else if (!isDraw) {
+          abLosses++;
+        }
+      }
+
+      if (abWins >= 5 && !achievements.contains('clutch_master')) {
+        achievements.add('clutch_master');
+      }
+      if (abWins >= 10 && !achievements.contains('unbreakable')) {
+        achievements.add('unbreakable');
       }
 
       transaction.update(userRef, {
@@ -145,8 +194,7 @@ class UserRepository {
         'wins': totalWins,
         'losses': user.losses + (!isWin && !isDraw ? 1 : 0),
         'draws': user.draws + (isDraw ? 1 : 0),
-        'matchesPlayed': user.matchesPlayed + 1,
-        'currentWinStreak': currentWinStreak,
+        'currentWinStreak': currentStreak,
         'highestWinStreak': highestWinStreak,
         'lastDailyBonusDate': lastDailyBonusDate != null ? Timestamp.fromDate(lastDailyBonusDate) : null,
         'rank': rankUpdate.newRank,
@@ -172,14 +220,17 @@ class UserRepository {
     required int xpGained,
     required int coinsGained,
     required bool isWin,
+    bool isDraw = false,
+    bool isArenaBreakerWin = false,
   }) async {
     await processMatchEnd(
       uid: uid,
       isWin: isWin,
-      isDraw: false,
+      isDraw: isDraw,
       correctAnswers: 0,
       totalQuestions: 0,
       coinsGained: coinsGained,
+      isArenaBreakerWin: isArenaBreakerWin,
     );
   }
 
@@ -192,19 +243,21 @@ class UserRepository {
         .set(history.toJson());
   }
 
-  Stream<List<MatchModel>> watchMatchHistory(String uid) {
-    return FirebaseFirestore.instance
+  Stream<List<MatchModel>> watchMatchHistory(String uid, {int? limit}) {
+    var query = FirebaseFirestore.instance
         .collection('users')
         .doc(uid)
         .collection('matchHistory')
-        .limit(20)
-        .snapshots()
-        .map((snapshot) {
-      final history = snapshot.docs
+        .orderBy('timestamp', descending: true);
+    
+    if (limit != null) {
+      query = query.limit(limit);
+    }
+
+    return query.snapshots().map((snapshot) {
+      return snapshot.docs
           .map((doc) => MatchModel.fromJson(doc.data()))
           .toList();
-      history.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-      return history;
     });
   }
 }

@@ -8,6 +8,7 @@ import '../data/repositories/user_repository.dart';
 import 'package:dio/dio.dart';
 import '../data/models/user_model.dart';
 import '../data/models/match_history_model.dart';
+import '../core/errors/result.dart';
 
 
 final dioProvider = Provider((ref) => Dio(BaseOptions(
@@ -32,10 +33,28 @@ final currentUserProvider = StreamProvider.autoDispose<UserModel?>((ref) {
   });
 });
 
+final userProfileProvider = FutureProvider.family<UserModel?, String>((ref, uid) async {
+  final repo = ref.watch(userRepositoryProvider);
+  final result = await repo.getUserProfile(uid);
+  return switch (result) {
+    Success(data: final user) => user,
+    Failure() => null,
+  };
+});
+
 final matchHistoryProvider = StreamProvider.autoDispose<List<MatchModel>>((ref) {
   final authState = ref.watch(authStateProvider).value;
   if (authState == null) return Stream.value([]);
 
   final repo = ref.watch(userRepositoryProvider);
-  return repo.watchMatchHistory(authState.uid);
+  return repo.watchMatchHistory(authState.uid, limit: 50); // Limit dashboard to 50 for performance
 });
+
+final userMatchHistoryProvider = FutureProvider.family<List<MatchModel>, String>((ref, uid) async {
+  final repo = ref.watch(userRepositoryProvider);
+  // Fetch full history for calculation on profile card
+  return repo.watchMatchHistory(uid).first;
+});
+
+// Simulated friends provider (simple set of UIDs)
+final friendsProvider = StateProvider<Set<String>>((ref) => {});

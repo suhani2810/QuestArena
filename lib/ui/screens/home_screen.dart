@@ -5,6 +5,7 @@ import 'tabs/dashboard_tab.dart';
 import 'tabs/battle_tab.dart';
 import 'tabs/leaderboard_tab.dart';
 import 'tabs/profile_tab.dart';
+import '../../providers/navigation_providers.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -14,8 +15,6 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  int _selectedIndex = 0;
-
   final List<Widget> _tabs = [
     const DashboardTab(),
     const BattleTab(),
@@ -25,8 +24,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final selectedIndex = ref.watch(tabIndexProvider);
+
     return Scaffold(
-      body: _tabs[_selectedIndex],
+      body: _tabs[selectedIndex],
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           border: Border(top: BorderSide(color: AppColors.divider.withValues(alpha: 0.5), width: 0.5)),
@@ -35,23 +36,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           height: 65,
           elevation: 0,
           backgroundColor: AppColors.bgBase,
-          selectedIndex: _selectedIndex,
-          onDestinationSelected: (index) => setState(() => _selectedIndex = index),
+          selectedIndex: selectedIndex,
+          onDestinationSelected: (index) => ref.read(tabIndexProvider.notifier).state = index,
           labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
           indicatorColor: AppColors.neonCyan.withValues(alpha: 0.1),
           destinations: [
-            _buildNavItem(0, Icons.dashboard_rounded, Icons.dashboard_outlined, 'HUB'),
-            _buildNavItem(1, Icons.bolt_rounded, Icons.bolt_outlined, 'BATTLE'),
-            _buildNavItem(2, Icons.leaderboard_rounded, Icons.leaderboard_outlined, 'RANKS'),
-            _buildNavItem(3, Icons.person_rounded, Icons.person_outlined, 'PROFILE'),
+            _buildNavItem(selectedIndex, 0, Icons.dashboard_rounded, Icons.dashboard_outlined, 'HUB'),
+            _buildNavItem(selectedIndex, 1, Icons.bolt_rounded, Icons.bolt_outlined, 'BATTLE'),
+            _buildNavItem(selectedIndex, 2, Icons.leaderboard_rounded, Icons.leaderboard_outlined, 'RANKS'),
+            _buildNavItem(selectedIndex, 3, Icons.person_rounded, Icons.person_outlined, 'PROFILE'),
           ],
         ),
       ),
     );
   }
 
-  NavigationDestination _buildNavItem(int index, IconData activeIcon, IconData icon, String label) {
-    final isSelected = _selectedIndex == index;
+  NavigationDestination _buildNavItem(int selectedIndex, int index, IconData activeIcon, IconData icon, String label) {
+    final isSelected = selectedIndex == index;
     return NavigationDestination(
       icon: Icon(icon, color: AppColors.textMuted),
       selectedIcon: Icon(activeIcon, color: AppColors.neonCyan),
