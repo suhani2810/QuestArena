@@ -12,9 +12,9 @@ final matchmakingRepositoryProvider = Provider((ref) {
 
 // This provider watches the matchmaking document in real-time
 final matchmakingTicketProvider = StreamProvider.autoDispose((ref) {
-  final user = ref.watch(currentUserProvider).value;
+  final user = ref.watch(currentUserProvider).value;//catches/sees whatever changes happens in the user profile, like badge change,etc
   if (user == null) return Stream.value(null);
 
   final repo = ref.watch(matchmakingRepositoryProvider);
   return repo.watchTicket(user.uid);
-});
+});//Track

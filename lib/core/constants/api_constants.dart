@@ -7,8 +7,12 @@ class ApiConstants {
 
   // Open Trivia Database
   static const String triviaBaseUrl = "https://opentdb.com/api.php";
-  static const String triviaQuestionsPath = "?amount=10&type=multiple";
-  static const String triviaUrl = "$triviaBaseUrl$triviaQuestionsPath";
+  static const String triviaUrl = "$triviaBaseUrl?amount=10&type=multiple";
+
+  static String triviaUrlForCategory(int? categoryId, {int amount = 10}) {
+    final category = categoryId == null ? '' : '&category=$categoryId';
+    return '$triviaBaseUrl?amount=$amount&type=multiple$category';
+  }
 
   // Firebase Configuration (Centralized for easier management)
   // Note: Firebase API keys are technically public identifiers for client-side apps,

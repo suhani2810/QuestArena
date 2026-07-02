@@ -32,7 +32,7 @@ final currentUserProvider = StreamProvider.autoDispose<UserModel?>((ref) {
   });
 });
 
-final matchHistoryProvider = StreamProvider.autoDispose<List<MatchHistoryModel>>((ref) {
+final matchHistoryProvider = StreamProvider.autoDispose<List<MatchModel>>((ref) {
   final authState = ref.watch(authStateProvider).value;
   if (authState == null) return Stream.value([]);
 

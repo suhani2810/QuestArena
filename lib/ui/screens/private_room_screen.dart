@@ -13,6 +13,8 @@ import 'package:questarena/core/utils/game_utils.dart';
 import 'package:questarena/providers/game_providers.dart';
 import 'package:questarena/providers/user_providers.dart';
 import 'package:questarena/ui/widgets/custom_text_field.dart';
+import 'package:questarena/core/models/quiz_category.dart';
+import 'package:questarena/ui/widgets/category_picker_sheet.dart';
 import 'lobby_screen.dart';
 
 class PrivateRoomScreen extends ConsumerStatefulWidget {
@@ -25,6 +27,7 @@ class PrivateRoomScreen extends ConsumerStatefulWidget {
 class _PrivateRoomScreenState extends ConsumerState<PrivateRoomScreen> {
   final _codeController = TextEditingController();
   bool _isLoading = false;
+  QuizCategory _selectedCategory = QuizCategory.mixed;
 
   void _createRoom() async {
     final user = ref.read(currentUserProvider).value;
@@ -37,7 +40,11 @@ class _PrivateRoomScreenState extends ConsumerState<PrivateRoomScreen> {
     
     // Create the room in Firestore
     // Note: We use ref.read(gameRepositoryProvider) which returns a GameRepository
-    final roomId = await ref.read(gameRepositoryProvider).createPrivateRoom(user.toJson(), code);
+    final roomId = await ref.read(gameRepositoryProvider).createPrivateRoom(
+      user.toJson(),
+      code,
+      _selectedCategory,
+    );
     
     if (mounted) {
       setState(() => _isLoading = false);
@@ -113,6 +120,22 @@ class _PrivateRoomScreenState extends ConsumerState<PrivateRoomScreen> {
                     const SizedBox(height: 16),
                     const Text('Host a new match'),
                     const SizedBox(height: 16),
+                    OutlinedButton.icon(
+                      onPressed: _isLoading
+                          ? null
+                          : () async {
+                              final category = await CategoryPickerSheet.show(
+                                context,
+                                selectedCategory: _selectedCategory,
+                              );
+                              if (category != null && mounted) {
+                                setState(() => _selectedCategory = category);
+                              }
+                            },
+                      icon: const Icon(Icons.category_rounded),
+                      label: Text('TOPIC: ${_selectedCategory.name.toUpperCase()}'),
+                    ),
+                    const SizedBox(height: 12),
                     ElevatedButton(
                       onPressed: _isLoading ? null : _createRoom,
                       style: ElevatedButton.styleFrom(

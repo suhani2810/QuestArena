@@ -54,7 +54,7 @@ class _BattleTabState extends ConsumerState<BattleTab> {
                         searchStartedAt: DateTime.now(),
                       );
                       await ref.read(matchmakingRepositoryProvider).startSearching(ticket);
-                      if (context.mounted) {
+                      if (mounted) {
                         Navigator.push(context, MaterialPageRoute(builder: (_) => const MatchmakingScreen()));
                       }
                     } finally {
@@ -123,7 +123,7 @@ class _BattleModeCard extends StatelessWidget {
           children: [
             Container(
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: color.withValues(alpha: 0.1), shape: BoxShape.circle),
+              decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
               child: Icon(icon, color: color, size: 32),
             ),
             const SizedBox(width: 20),

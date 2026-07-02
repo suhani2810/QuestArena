@@ -23,7 +23,7 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  int _currentIndex = 0;
+  int _selectedIndex = 0;
   bool _checkedDailyReward = false;
 
   final List<Widget> _tabs = [
@@ -66,13 +66,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           onClaim: () => Navigator.pop(context),
         ),
       );
-      return; // If we showed a streak reward, maybe skip the daily reward or just continue
+      return;
     }
-
-    // Keep the existing daily reward logic if separate, but the requirements seem to point to this new system.
-    // I will keep the original daily reward logic as a fallback or if it's meant to be complementary.
-    // However, the user said "Keep all streak logic inside StreakService".
-    // I'll stick to the streak logic for now.
   }
 
   @override
@@ -102,24 +97,35 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     });
 
     return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _tabs,
+      body: _tabs[_selectedIndex],
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: AppColors.divider.withValues(alpha: 0.5), width: 0.5)),
+        ),
+        child: NavigationBar(
+          height: 65,
+          elevation: 0,
+          backgroundColor: AppColors.bgBase,
+          selectedIndex: _selectedIndex,
+          onDestinationSelected: (index) => setState(() => _selectedIndex = index),
+          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+          indicatorColor: AppColors.neonCyan.withValues(alpha: 0.1),
+          destinations: [
+            _buildNavItem(0, Icons.dashboard_rounded, Icons.dashboard_outlined, 'HUB'),
+            _buildNavItem(1, Icons.bolt_rounded, Icons.bolt_outlined, 'BATTLE'),
+            _buildNavItem(2, Icons.leaderboard_rounded, Icons.leaderboard_outlined, 'RANKS'),
+            _buildNavItem(3, Icons.person_rounded, Icons.person_outlined, 'PROFILE'),
+          ],
+        ),
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
-        type: BottomNavigationBarType.fixed,
-        backgroundColor: AppColors.primaryBg,
-        selectedItemColor: AppColors.gold,
-        unselectedItemColor: Colors.grey,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.dashboard_rounded), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.flash_on_rounded), label: 'Battle'),
-          BottomNavigationBarItem(icon: Icon(Icons.leaderboard_rounded), label: 'Rank'),
-          BottomNavigationBarItem(icon: Icon(Icons.person_rounded), label: 'Profile'),
-        ],
-      ),
+    );
+  }
+
+  NavigationDestination _buildNavItem(int index, IconData activeIcon, IconData icon, String label) {
+    return NavigationDestination(
+      icon: Icon(icon, color: AppColors.textMuted),
+      selectedIcon: Icon(activeIcon, color: AppColors.neonCyan),
+      label: label,
     );
   }
 }

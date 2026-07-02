@@ -6,13 +6,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:questarena/firebase_options.dart';
-import 'core/constants/colors.dart';
+import 'core/theme/app_theme.dart';  // ← CHANGED: was core/constants/colors.dart
 import 'ui/screens/auth_wrapper.dart';
 
 void main() async {
   // 1. Ensure Flutter framework is ready
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // 2. Initialize Firebase using the generated options for the current platform (Android/iOS/Web)
   try {
     await Firebase.initializeApp(
@@ -21,7 +21,7 @@ void main() async {
   } catch (e) {
     debugPrint('Firebase Initialization Error: $e');
   }
-  
+
   runApp(
     const ProviderScope(
       child: QuestArenaApp(),
@@ -37,15 +37,7 @@ class QuestArenaApp extends StatelessWidget {
     return MaterialApp(
       title: 'QuestArena',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: AppColors.primaryBg,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: AppColors.purple,
-          brightness: Brightness.dark,
-        ),
-        useMaterial3: true,
-      ),
+      theme: AppTheme.darkArena,  // ← CHANGED: replaced entire ThemeData block
       home: const AuthWrapper(),
     );
   }

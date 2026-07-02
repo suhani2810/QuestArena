@@ -1,6 +1,3 @@
-// WHAT THIS FILE DOES:
-// Displays the player's detailed stats and achievements grid.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -10,6 +7,7 @@ import '../../../core/constants/avatars.dart';
 import '../../../providers/user_providers.dart';
 import '../../../providers/auth_providers.dart';
 import '../../../providers/achievement_providers.dart';
+import '../../../providers/leaderboard_providers.dart';
 import '../../../data/models/achievement_model.dart';
 import '../../../core/errors/result.dart';
 import '../../widgets/animated_coin_counter.dart';
@@ -72,7 +70,6 @@ class _ProfileTabState extends ConsumerState<ProfileTab> {
 
     if (selectedAvatar != null && mounted) {
       await ref.read(userRepositoryProvider).updateAvatarUrl(uid, selectedAvatar);
-      ref.invalidate(currentUserProvider);
     }
   }
 
@@ -89,13 +86,14 @@ class _ProfileTabState extends ConsumerState<ProfileTab> {
         final achievementsAsync = ref.watch(userAchievementsProvider);
 
         return Scaffold(
+          backgroundColor: AppColors.bgBase,
           appBar: AppBar(
             title: Text('PLAYER PROFILE', style: AppTextStyles.display.copyWith(fontSize: 18)),
             backgroundColor: Colors.transparent,
             elevation: 0,
             actions: [
               IconButton(
-                icon: const Icon(Icons.logout_rounded, color: AppColors.red),
+                icon: const Icon(Icons.logout_rounded, color: AppColors.neonPink),
                 onPressed: () => ref.read(authRepositoryProvider).logout(),
               ),
             ],
@@ -138,22 +136,24 @@ class _ProfileTabState extends ConsumerState<ProfileTab> {
                 const SizedBox(height: 16),
                 Text(user.username, style: AppTextStyles.headline),
                 Text(user.rank, style: AppTextStyles.label.copyWith(color: AppColors.gold)),
-                
+
                 const SizedBox(height: 32),
-                
+
                 // Stats Summary
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    _ProfileStat(label: 'LEVEL', value: '${user.level}'),
-                    _ProfileStat(label: 'WINS', value: '${user.totalWins}'),
+                    _ProfileStat(label: 'LEVEL', value: '${user.level}', color: AppColors.purple, icon: Icons.star_rounded),
+                    _ProfileStat(label: 'WINS', value: '${user.wins}', color: AppColors.teal, icon: Icons.emoji_events_rounded),
                     Column(
                       children: [
+                        const Icon(Icons.monetization_on_rounded, color: AppColors.gold, size: 24),
+                        const SizedBox(height: 8),
                         AnimatedCoinCounter(
-                          value: user.coins, 
-                          style: AppTextStyles.headline.copyWith(color: AppColors.gold, fontSize: 24),
+                          value: user.coins,
+                          style: AppTextStyles.headline.copyWith(color: Colors.white, fontSize: 18),
                         ),
-                        Text('COINS', style: AppTextStyles.label.copyWith(fontSize: 10)),
+                        Text('COINS', style: AppTextStyles.label.copyWith(fontSize: 10, color: AppColors.textSecondary)),
                       ],
                     ),
                   ],
@@ -195,10 +195,8 @@ class _ProfileTabState extends ConsumerState<ProfileTab> {
                   ),
                 ),
 
-                const SizedBox(height: 32),
-
                 const SizedBox(height: 40),
-                
+
                 // Achievement Grid
                 Text('ACHIEVEMENTS', style: AppTextStyles.label),
                 const SizedBox(height: 16),
@@ -224,7 +222,7 @@ class _ProfileTabState extends ConsumerState<ProfileTab> {
                   onPressed: () => _showDeleteConfirmation(context, ref, user.uid),
                   icon: const Icon(Icons.delete_forever_rounded, color: AppColors.red, size: 20),
                   label: Text(
-                    'DELETE ACCOUNT', 
+                    'DELETE ACCOUNT',
                     style: AppTextStyles.label.copyWith(color: AppColors.red, fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -255,13 +253,13 @@ class _ProfileTabState extends ConsumerState<ProfileTab> {
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(context); // Close dialog
-              
+
               // 1. Delete Firestore data first
               await ref.read(userRepositoryProvider).deleteUserProfile(uid);
-              
+
               // 2. Delete Auth account
               final result = await ref.read(authRepositoryProvider).deleteAccount();
-              
+
               if (context.mounted) {
                 if (result case Failure(error: final e)) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -349,7 +347,7 @@ class _AchievementTile extends StatelessWidget {
                     Text(
                       'REWARD: ${achievement.rewardCoins} C',
                       style: AppTextStyles.label.copyWith(
-                        fontSize: 9, 
+                        fontSize: 9,
                         color: isUnlocked ? AppColors.gold : AppColors.textMuted,
                         fontWeight: FontWeight.bold,
                       ),
@@ -366,25 +364,35 @@ class _AchievementTile extends StatelessWidget {
 
   IconData _getIcon(AchievementType type) {
     switch (type) {
-      case AchievementType.matchesPlayed: return Icons.sports_esports_rounded;
-      case AchievementType.matchesWon: return Icons.emoji_events_rounded;
-      case AchievementType.questionsCorrect: return Icons.psychology_rounded;
-      case AchievementType.perfectScores: return Icons.star_rounded;
+      case AchievementType.matchesPlayed:
+        return Icons.sports_esports_rounded;
+      case AchievementType.matchesWon:
+        return Icons.emoji_events_rounded;
+      case AchievementType.questionsCorrect:
+        return Icons.psychology_rounded;
+      case AchievementType.perfectScores:
+        return Icons.star_rounded;
     }
+    return Icons.help_outline_rounded;
   }
 }
 
 class _ProfileStat extends StatelessWidget {
   final String label;
   final String value;
-  const _ProfileStat({required this.label, required this.value});
+  final Color color;
+  final IconData icon;
+
+  const _ProfileStat({required this.label, required this.value, required this.color, required this.icon});
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Text(value, style: AppTextStyles.headline.copyWith(color: AppColors.gold, fontSize: 24)),
-        Text(label, style: AppTextStyles.label.copyWith(fontSize: 10)),
+        Icon(icon, color: color, size: 24),
+        const SizedBox(height: 8),
+        Text(value, style: AppTextStyles.headline.copyWith(fontSize: 18, color: Colors.white)),
+        Text(label, style: AppTextStyles.label.copyWith(fontSize: 10, color: AppColors.textSecondary)),
       ],
     );
   }

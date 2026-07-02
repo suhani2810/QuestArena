@@ -1,0 +1,7 @@
+{
+  "name": "questarena",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "git clone -b stable --depth 1 https://github.com/flutter/flutter.git && ./flutter/bin/flutter build web --release && cp -r build/web/* ."
+  }
+}

@@ -19,7 +19,7 @@ class FirestoreService {
   // Get a single document
   Future<DocumentSnapshot> getDocument(String path) async {
     return await _db.doc(path).get();
-  }
+  }//fetching document from firebase
 
   // Delete a document
   Future<void> deleteData(String path) async {
