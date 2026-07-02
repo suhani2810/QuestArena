@@ -15,6 +15,7 @@ class UserModel {
   final int losses;
   final int draws;
   final int matchesPlayed;
+  final int eloRating;
   final int currentWinStreak;
   final int highestWinStreak;
   final DateTime? lastDailyBonusDate;
@@ -43,6 +44,7 @@ class UserModel {
     this.losses = 0,
     this.draws = 0,
     this.matchesPlayed = 0,
+    this.eloRating = 1200,
     this.currentWinStreak = 0,
     this.highestWinStreak = 0,
     this.lastDailyBonusDate,
@@ -73,6 +75,7 @@ class UserModel {
       losses: json['losses'] ?? json['totalLosses'] ?? 0,
       draws: json['draws'] ?? json['totalDraws'] ?? 0,
       matchesPlayed: json['matchesPlayed'] ?? 0,
+      eloRating: json['eloRating'] ?? 1200,
       currentWinStreak: json['currentWinStreak'] ?? json['currentStreak'] ?? 0,
       highestWinStreak: json['highestWinStreak'] ?? 0,
       lastDailyBonusDate: json['lastDailyBonusDate'] != null
@@ -101,10 +104,11 @@ class UserModel {
         'rank': rank,
         'subRank': subRank,
         'rankPoints': rankPoints,
-        'wins': wins,
+            'wins': wins,
         'losses': losses,
         'draws': draws,
         'matchesPlayed': matchesPlayed,
+        'eloRating': eloRating,
         'currentWinStreak': currentWinStreak,
         'highestWinStreak': highestWinStreak,
         'lastDailyBonusDate': lastDailyBonusDate != null
@@ -134,6 +138,7 @@ class UserModel {
     int? losses,
     int? draws,
     int? matchesPlayed,
+    int? eloRating,
     int? currentWinStreak,
     int? highestWinStreak,
     DateTime? lastDailyBonusDate,
@@ -141,6 +146,7 @@ class UserModel {
     int? arenaBreakerWins,
     int? arenaBreakerLosses,
     double? averageAccuracy,
+    bool clearSubRank = false,
     int? oneOptionLifelines,
     int? twoOptionLifelines,
     int? rankProtectionMatches,
@@ -156,12 +162,13 @@ class UserModel {
       xp: xp ?? this.xp,
       coins: coins ?? this.coins,
       rank: rank ?? this.rank,
-      subRank: subRank ?? this.subRank,
+      subRank: clearSubRank ? null : (subRank ?? this.subRank),
       rankPoints: rankPoints ?? this.rankPoints,
       wins: wins ?? this.wins,
       losses: losses ?? this.losses,
       draws: draws ?? this.draws,
       matchesPlayed: matchesPlayed ?? this.matchesPlayed,
+      eloRating: eloRating ?? this.eloRating,
       currentWinStreak: currentWinStreak ?? this.currentWinStreak,
       highestWinStreak: highestWinStreak ?? this.highestWinStreak,
       lastDailyBonusDate: lastDailyBonusDate ?? this.lastDailyBonusDate,

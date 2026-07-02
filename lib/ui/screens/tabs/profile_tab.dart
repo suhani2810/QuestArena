@@ -12,6 +12,7 @@ import '../../widgets/rank_progress_bar.dart';
 import '../../widgets/neon_swirl_background.dart';
 import '../../widgets/smart_avatar.dart';
 import '../character_select_screen.dart';
+import 'edit_profile_screen.dart';
 
 class ProfileTab extends ConsumerStatefulWidget {
   const ProfileTab({super.key});
@@ -59,7 +60,7 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with SingleTickerProvid
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: AppColors.bgCard,
+        backgroundColor: AppColors.cardBg,
         title: const Text('Delete Account?', style: TextStyle(color: Colors.white)),
         content: const Text(
           'This action is permanent and will delete all your progress, ranks, and coins.',
@@ -108,11 +109,6 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with SingleTickerProvid
           {'id': 'scholar', 'name': 'Scholar', 'desc': 'Get 10/10 in one match', 'icon': Icons.school},
         ];
 
-        final character = kCharacters.firstWhere(
-          (c) => c.id == (user.avatarUrl ?? ''),
-          orElse: () => kCharacters.first,
-        );
-
         return Scaffold(
           backgroundColor: AppColors.bgBase,
           appBar: AppBar(
@@ -125,7 +121,7 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with SingleTickerProvid
             elevation: 0,
             actions: [
               IconButton(
-                icon: const Icon(Icons.logout_rounded, color: AppColors.neonPink),
+                icon: const Icon(Icons.logout_rounded, color: AppColors.red),
                 onPressed: () => ref.read(authRepositoryProvider).logout(),
               ),
             ],
@@ -176,7 +172,7 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with SingleTickerProvid
                                   shape: BoxShape.circle,
                                   boxShadow: [
                                     BoxShadow(
-                                      color: AppColors.glowViolet,
+                                      color: Colors.black26,
                                       blurRadius: 8,
                                     )
                                   ],
@@ -199,6 +195,27 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with SingleTickerProvid
                         style: AppTextStyles.label.copyWith(color: AppColors.gold, fontWeight: FontWeight.bold),
                       ),
                       
+                      const SizedBox(height: 16),
+
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const EditProfileScreen(),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.edit, size: 16, color: Colors.white),
+                        label: const Text('Edit Details', style: TextStyle(color: Colors.white)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.purple.withValues(alpha: 0.5),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+
                       if (isMvp) ...[
                         const SizedBox(height: 12),
                         Container(

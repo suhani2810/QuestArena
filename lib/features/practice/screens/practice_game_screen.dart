@@ -24,6 +24,7 @@ class _PracticeGameScreenState extends ConsumerState<PracticeGameScreen> with Si
   bool _hasAnswered = false;
   List<String> _shuffledOptions = [];
   int _lastQuestionIndex = -1;
+  String? _lastABQuestionText;
 
   @override
   void initState() {
@@ -155,9 +156,8 @@ class _PracticeGameScreenState extends ConsumerState<PracticeGameScreen> with Si
         leading: IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => Navigator.pop(context)),
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 12.0),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24.0),
           child: room.status == 'arena_breaker' 
               ? _buildArenaBreakerUI(room) 
               : _buildGameUI(room),
@@ -174,24 +174,35 @@ class _PracticeGameScreenState extends ConsumerState<PracticeGameScreen> with Si
 
     return Column(
       children: [
+        const SizedBox(height: 16),
         _buildScores(room),
-        const SizedBox(height: 32),
+        const SizedBox(height: 24),
         _buildTimerBar(),
-        const SizedBox(height: 32),
-        Text(qText, style: AppTextStyles.headline, textAlign: TextAlign.center)
-            .animate(key: ValueKey(room.currentQuestionIndex))
-            .fadeIn(),
-        const SizedBox(height: 32),
-        ..._shuffledOptions.map((opt) => Padding(
-          padding: const EdgeInsets.only(bottom: 16),
-          child: _AnswerButton(
-            text: GameUtils.decodeHtmlEntities(opt),
-            isSelected: _selectedAnswer == opt,
-            isCorrect: _hasAnswered && opt == question['correct_answer'],
-            isWrong: _hasAnswered && _selectedAnswer == opt && opt != question['correct_answer'],
-            onTap: () => _onAnswerSelected(opt, room),
+        const SizedBox(height: 24),
+        Expanded(
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            child: Column(
+              children: [
+                Text(qText, style: AppTextStyles.headline, textAlign: TextAlign.center)
+                    .animate(key: ValueKey(room.currentQuestionIndex))
+                    .fadeIn(),
+                const SizedBox(height: 32),
+                ..._shuffledOptions.map((opt) => Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: _AnswerButton(
+                    text: GameUtils.decodeHtmlEntities(opt),
+                    isSelected: _selectedAnswer == opt,
+                    isCorrect: _hasAnswered && opt == question['correct_answer'],
+                    isWrong: _hasAnswered && _selectedAnswer == opt && opt != question['correct_answer'],
+                    onTap: () => _onAnswerSelected(opt, room),
+                  ),
+                )),
+                const SizedBox(height: 16),
+              ],
+            ),
           ),
-        )),
+        ),
       ],
     );
   }
@@ -199,26 +210,46 @@ class _PracticeGameScreenState extends ConsumerState<PracticeGameScreen> with Si
   Widget _buildArenaBreakerUI(GameRoomModel room) {
     final question = room.arenaBreakerQuestion;
     if (question == null) return const Center(child: CircularProgressIndicator());
+
+    // Refresh options if the AB question has changed
+    final qTextRaw = question['question']?.toString();
+    if (_lastABQuestionText != qTextRaw) {
+      _shuffledOptions = List<String>.from(question['incorrect_answers'] ?? [])
+        ..add(question['correct_answer'] ?? '')
+        ..shuffle();
+      _lastABQuestionText = qTextRaw;
+    }
     
     final qText = GameUtils.decodeHtmlEntities(question['question']);
 
     return Column(
       children: [
+        const SizedBox(height: 16),
         const Text('⚔ ARENA BREAKER ⚔', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.red)),
-        const SizedBox(height: 32),
+        const SizedBox(height: 24),
         _buildTimerBar(),
-        const SizedBox(height: 32),
-        Text(qText, style: AppTextStyles.headline, textAlign: TextAlign.center).animate().fadeIn(),
-        const SizedBox(height: 32),
-        ..._shuffledOptions.map((opt) => Padding(
-          padding: const EdgeInsets.only(bottom: 16),
-          child: _AnswerButton(
-            text: GameUtils.decodeHtmlEntities(opt),
-            isSelected: _selectedAnswer == opt,
-            onTap: () => _handleABAnswer(opt, room),
-            isCorrect: false, isWrong: false,
+        const SizedBox(height: 24),
+        Expanded(
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            child: Column(
+              children: [
+                Text(qText, style: AppTextStyles.headline, textAlign: TextAlign.center).animate().fadeIn(),
+                const SizedBox(height: 32),
+                ..._shuffledOptions.map((opt) => Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: _AnswerButton(
+                    text: GameUtils.decodeHtmlEntities(opt),
+                    isSelected: _selectedAnswer == opt,
+                    onTap: () => _handleABAnswer(opt, room),
+                    isCorrect: false, isWrong: false,
+                  ),
+                )),
+                const SizedBox(height: 16),
+              ],
+            ),
           ),
-        )),
+        ),
       ],
     );
   }
@@ -227,9 +258,20 @@ class _PracticeGameScreenState extends ConsumerState<PracticeGameScreen> with Si
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        _PlayerStat(name: room.player1['username'], score: room.player1['score'], isLeft: true),
+        Expanded(
+          child: _PlayerStat(name: room.player1['username'], score: room.player1['score'], isLeft: true),
+        ),
+        const SizedBox(width: 12),
         Text('${room.currentQuestionIndex + 1}/10', style: AppTextStyles.label),
-        _PlayerStat(name: room.player2?['username'] ?? '...', score: room.player2?['score'] ?? 0, isLeft: false, isBot: true),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _PlayerStat(
+            name: room.player2?['username'] ?? '...',
+            score: room.player2?['score'] ?? 0,
+            isLeft: false,
+            isBot: true,
+          ),
+        ),
       ],
     );
   }
@@ -262,13 +304,21 @@ class _PlayerStat extends StatelessWidget {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (!isLeft && isBot) Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              margin: const EdgeInsets.only(right: 6),
-              decoration: BoxDecoration(color: AppColors.red, borderRadius: BorderRadius.circular(4)),
-              child: const Text('BOT', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold)),
+            if (!isLeft && isBot)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                margin: const EdgeInsets.only(right: 6),
+                decoration: BoxDecoration(color: AppColors.red, borderRadius: BorderRadius.circular(4)),
+                child: const Text('BOT', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold)),
+              ),
+            Flexible(
+              child: Text(
+                name,
+                style: AppTextStyles.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-            Text(name, style: AppTextStyles.label),
           ],
         ),
         Text('$score', style: AppTextStyles.headline.copyWith(color: AppColors.gold, fontSize: 20)),

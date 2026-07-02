@@ -1,17 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../../core/constants/colors.dart';
 import '../../../core/constants/text_styles.dart';
-import '../../../core/utils/rank_system.dart';
 import '../../../providers/user_providers.dart';
+import '../../../providers/matchmaking_providers.dart';
+import '../../../data/models/matchmaking_model.dart';
+import '../store_screen.dart';
+import '../matchmaking_screen.dart';
+import '../../widgets/category_picker_sheet.dart';
+import '../../../core/utils/rank_system.dart';
 import '../../widgets/rank_badge.dart';
 import '../../widgets/rank_progress_bar.dart';
 import '../../widgets/xp_progress_bar.dart';
 import '../../widgets/smart_avatar.dart';
 import '../../widgets/neon_swirl_background.dart';
-import '../store_screen.dart';
 
 class DashboardTab extends ConsumerStatefulWidget {
   const DashboardTab({super.key});
@@ -54,132 +57,232 @@ class _DashboardTabState extends ConsumerState<DashboardTab> with TickerProvider
           return const Center(child: Text('User not found', style: TextStyle(color: AppColors.textSecondary)));
         }
 
+        final totalMatches = user.wins + user.losses;
+        final winRate = totalMatches == 0
+            ? 0
+            : ((user.wins / totalMatches) * 100).round();
+
         return Scaffold(
           backgroundColor: Colors.transparent,
           body: NeonSwirlBackground(
             colors: const [AppColors.neonCyan, AppColors.purple],
             child: FadeTransition(
               opacity: _fadeAnimation,
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // TOP BAR
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'DASHBOARD',
-                          style: AppTextStyles.headline.copyWith(fontSize: 18),
-                        ),
-                        IconButton(
-                          onPressed: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => const StoreScreen()),
+              child: SafeArea(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // TOP BAR
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'DASHBOARD',
+                            style: AppTextStyles.headline.copyWith(fontSize: 18),
                           ),
-                          icon: const Icon(Icons.shopping_bag_rounded, color: AppColors.gold),
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 24),
-
-                    // PLAYER HEADER CARD
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: AppColors.cardBg.withValues(alpha: 0.8),
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(color: AppColors.surface),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.2),
-                            blurRadius: 10,
-                            offset: const Offset(0, 5),
+                          IconButton(
+                            onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const StoreScreen()),
+                            ),
+                            icon: const Icon(Icons.shopping_bag_rounded, color: AppColors.gold),
                           ),
                         ],
                       ),
-                      child: Column(
-                        children: [
-                          Row(
-                            children: [
-                              Stack(
-                                alignment: Alignment.bottomRight,
-                                children: [
-                                  SmartAvatar(
-                                    avatarUrl: user.avatarUrl,
-                                    size: 70,
-                                    showGlow: true,
-                                  ),
-                                  RankBadge(rank: user.rank, subRank: user.subRank, size: 28),
-                                ],
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+
+                      const SizedBox(height: 24),
+
+                      // PLAYER HEADER CARD
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: AppColors.cardBg.withValues(alpha: 0.8),
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(color: AppColors.surface),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.2),
+                              blurRadius: 10,
+                              offset: const Offset(0, 5),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              children: [
+                                Stack(
+                                  alignment: Alignment.bottomRight,
                                   children: [
+                                    SmartAvatar(
+                                      avatarUrl: user.avatarUrl,
+                                      size: 70,
+                                      showGlow: true,
+                                    ),
+                                    RankBadge(rank: user.rank, subRank: user.subRank, size: 28),
+                                  ],
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        user.username.toUpperCase(),
+                                        style: AppTextStyles.headline.copyWith(
+                                          letterSpacing: 2,
+                                          color: AppColors.textPrimary,
+                                        ),
+                                      ),
+                                      Text(
+                                        RankSystem.getRankName(user.rank, user.subRank),
+                                        style: AppTextStyles.label.copyWith(
+                                          color: RankSystem.getRankColor(user.rank),
+                                          fontWeight: FontWeight.w900,
+                                          letterSpacing: 1.5,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 12),
+                                      XpProgressBar(totalXp: user.xp),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (user.rank != 'Legend' && user.rank != 'Unranked') ...[
+                              const SizedBox(height: 16),
+                              const Divider(color: AppColors.surface),
+                              const SizedBox(height: 8),
+                              RankProgressBar(rank: user.rank, subRank: user.subRank, points: user.rankPoints),
+                            ],
+                          ],
+                        ),
+                      ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.1, end: 0),
+
+                      const SizedBox(height: 32),
+
+                      Text('QUICK STATS', style: AppTextStyles.label),
+                      const SizedBox(height: 12),
+                      
+                      Row(
+                        children: [
+                          _StatCard(
+                            label: 'WINS',
+                            value: user.wins.toString(),
+                            color: AppColors.teal,
+                            icon: Icons.emoji_events_rounded,
+                          ),
+                          const SizedBox(width: 8),
+                          _StatCard(
+                            label: 'LOSSES',
+                            value: user.losses.toString(),
+                            color: AppColors.red,
+                            icon: Icons.sentiment_very_dissatisfied_rounded,
+                          ),
+                          const SizedBox(width: 8),
+                          _StatCard(
+                            label: 'WIN %',
+                            value: '$winRate%',
+                            color: AppColors.gold,
+                            icon: Icons.auto_graph_rounded,
+                          ),
+                        ],
+                      ).animate().fadeIn(delay: 400.ms),
+
+                      const SizedBox(height: 32),
+
+                      // BATTLE BUTTON (Quick Action)
+                      GestureDetector(
+                        onTap: () async {
+                          final category = await CategoryPickerSheet.show(context);
+                          if (category == null || !context.mounted) return;
+
+                          final ticket = MatchmakingModel(
+                            uid: user.uid,
+                            username: user.username,
+                            avatarUrl: user.avatarUrl,
+                            rank: user.rank,
+                            categoryId: category.id,
+                            categoryName: category.name,
+                            eloRating: user.eloRating,
+                            searchStartedAt: DateTime.now(),
+                          );
+
+                          await ref
+                              .read(matchmakingRepositoryProvider)
+                              .startSearching(ticket);
+
+                          if (context.mounted) {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => MatchmakingScreen(categoryName: category.name),
+                              ),
+                            );
+                          }
+                        },
+                        child: Container(
+                          height: 120,
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [
+                                AppColors.purple,
+                                Color(0xFF5A3EBC),
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(24),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppColors.purple.withValues(alpha: 0.5),
+                                blurRadius: 20,
+                                offset: const Offset(0, 8),
+                              ),
+                            ],
+                          ),
+                          child: Stack(
+                            children: [
+                              Positioned(
+                                right: -20,
+                                bottom: -20,
+                                child: Icon(
+                                  Icons.flash_on_rounded,
+                                  size: 100,
+                                  color: Colors.white.withValues(alpha: 0.1),
+                                ),
+                              ),
+                              Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(
+                                      Icons.play_arrow_rounded,
+                                      size: 32,
+                                      color: Colors.white,
+                                    ),
                                     Text(
-                                      user.username.toUpperCase(),
-                                      style: AppTextStyles.headline.copyWith(
+                                      'BATTLE NOW',
+                                      style: AppTextStyles.display.copyWith(
+                                        color: Colors.white,
+                                        fontSize: 20,
                                         letterSpacing: 2,
-                                        color: AppColors.textPrimary,
                                       ),
                                     ),
-                                    Text(
-                                      RankSystem.getRankName(user.rank, user.subRank),
-                                      style: AppTextStyles.label.copyWith(
-                                        color: RankSystem.getRankColor(user.rank),
-                                        fontWeight: FontWeight.w900,
-                                        letterSpacing: 1.5,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 12),
-                                    XpProgressBar(totalXp: user.xp),
                                   ],
                                 ),
                               ),
                             ],
                           ),
-                          if (user.rank != 'Legend' && user.rank != 'Unranked') ...[
-                            const SizedBox(height: 16),
-                            const Divider(color: AppColors.surface),
-                            const SizedBox(height: 8),
-                            RankProgressBar(rank: user.rank, subRank: user.subRank, points: user.rankPoints),
-                          ],
-                        ],
-                      ),
-                    ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.1, end: 0),
+                        ),
+                      ).animate().fadeIn(delay: 600.ms).scale(),
 
-                    const SizedBox(height: 32),
-
-                    Text('QUICK STATS', style: AppTextStyles.label),
-                    const SizedBox(height: 12),
-                    
-                    historyAsync.when(
-                      loading: () => const SizedBox(height: 80, child: Center(child: CircularProgressIndicator())),
-                      error: (e, s) => Text('Error: $e'),
-                      data: (history) {
-                        final wins = history.where((m) => m.playerScore > m.opponentScore).length;
-                        final losses = history.where((m) => m.playerScore < m.opponentScore).length;
-                        final draws = history.where((m) => m.playerScore == m.opponentScore).length;
-
-                        return Row(
-                          children: [
-                            _StatCard(label: 'WINS', value: wins.toString(), color: AppColors.teal, icon: Icons.emoji_events_rounded),
-                            const SizedBox(width: 12),
-                            _StatCard(label: 'LOSSES', value: losses.toString(), color: AppColors.red, icon: Icons.sentiment_very_dissatisfied_rounded),
-                            const SizedBox(width: 12),
-                            _StatCard(label: 'DRAWS', value: draws.toString(), color: AppColors.gold, icon: Icons.handshake_rounded),
-                          ],
-                        );
-                      },
-                    ).animate().fadeIn(delay: 400.ms),
-                    
-                    const SizedBox(height: 32),
-                    const _RecentHistorySection(),
-                  ],
+                      const SizedBox(height: 32),
+                      const _RecentHistorySection(),
+                    ],
+                  ),
                 ),
               ),
             ),

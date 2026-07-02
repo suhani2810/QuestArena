@@ -12,6 +12,7 @@ class LeaderboardModel {
   final int currentStreak;
   final double averageAccuracy;
   final int? subRank;
+  final int eloRating;
 
   LeaderboardModel({
     required this.uid,
@@ -24,6 +25,7 @@ class LeaderboardModel {
     this.currentStreak = 0,
     this.averageAccuracy = 0.0,
     this.subRank,
+    this.eloRating = 1200,
   });
 
   double get mvpScore => (xp / 10) + (totalWins * 10) + (averageAccuracy * 2) + (currentStreak * 5);
@@ -40,6 +42,7 @@ class LeaderboardModel {
       currentStreak: json['currentStreak'] ?? 0,
       averageAccuracy: (json['averageAccuracy'] ?? 0).toDouble(),
       subRank: json['subRank'],
+      eloRating: json['eloRating'] ?? 1200,
     );
   }
 
@@ -54,5 +57,6 @@ class LeaderboardModel {
     'currentStreak': currentStreak,
     'averageAccuracy': averageAccuracy,
     'subRank': subRank,
+    'eloRating': eloRating,
   };
 }

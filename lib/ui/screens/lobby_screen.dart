@@ -22,6 +22,22 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
   Timer? _timer;
   bool _isStartingGame = false;
 
+  String _getCategoryIcon(String category) {
+    final lowerCategory = category.toLowerCase();
+    if (lowerCategory.contains('computers')) return '💻';
+    if (lowerCategory.contains('music')) return '🎵';
+    if (lowerCategory.contains('film')) return '🎬';
+    if (lowerCategory.contains('books')) return '📚';
+    if (lowerCategory.contains('geography')) return '🌍';
+    if (lowerCategory.contains('sports')) return '⚽';
+    if (lowerCategory.contains('mathematics')) return '🧮';
+    if (lowerCategory.contains('animals')) return '🐾';
+    if (lowerCategory.contains('video games')) return '🎮';
+    if (lowerCategory.contains('general knowledge')) return '📖';
+    if (lowerCategory.contains('mixed') || lowerCategory.contains('random')) return '🎲';
+    return '🎯';
+  }
+
   Future<void> _enterGame() async {
     if (_isStartingGame || !mounted) return;
     _isStartingGame = true;
@@ -114,6 +130,45 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                               const SizedBox(height: 8),
                               Text('ROOM CODE:', style: AppTextStyles.label.copyWith(fontSize: 10, letterSpacing: 1)),
                               Text(room.roomCode, style: AppTextStyles.display.copyWith(color: AppColors.neonAmber, fontSize: 32, letterSpacing: 4)),
+                              
+                              if (room.roomCode.isNotEmpty) ...[
+                                const SizedBox(height: 32),
+                                Text(
+                                  'MATCH TOPIC',
+                                  style: AppTextStyles.label.copyWith(
+                                    fontSize: 9,
+                                    color: AppColors.textSecondary,
+                                    letterSpacing: 2,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      room.categoryName == 'Loading' 
+                                        ? '⏳' 
+                                        : room.categoryName.isEmpty 
+                                          ? '❓' 
+                                          : _getCategoryIcon(room.categoryName),
+                                      style: const TextStyle(fontSize: 18),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      room.categoryName == 'Loading'
+                                        ? 'LOADING...'
+                                        : room.categoryName.isEmpty
+                                          ? 'NOT SELECTED'
+                                          : room.categoryName.toUpperCase(),
+                                      style: AppTextStyles.label.copyWith(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w900,
+                                        letterSpacing: 2,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ],
                           )
                         : Column(
