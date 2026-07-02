@@ -14,6 +14,7 @@ import '../../data/models/game_room_model.dart';
 import '../../core/utils/game_utils.dart';
 import '../widgets/smart_avatar.dart';
 import '../widgets/neon_swirl_background.dart';
+import '../widgets/lifeline_button.dart';
 import 'result_screen.dart';
 
 class GameScreen extends ConsumerStatefulWidget {
@@ -30,9 +31,10 @@ class _GameScreenState extends ConsumerState<GameScreen>
   String? _selectedAnswer;
   bool _hasAnswered = false;
   List<String> _shuffledOptions = [];
-  List<String> _fiftyFiftyHiddenOptions = [];
+  List<String> _hiddenOptions = [];
   int _lastQuestionIndex = -1;
-  bool _hasUsedFiftyFifty = false;
+  bool _hasUsedOneOptionLifeline = false;
+  bool _hasUsedTwoOptionLifeline = false;
 
   // Heartbeat & Timer state
   Timer? _heartbeatTimer;
@@ -214,7 +216,9 @@ class _GameScreenState extends ConsumerState<GameScreen>
         setState(() {
           _hasAnswered = false;
           _selectedAnswer = null;
-          _fiftyFiftyHiddenOptions = [];
+          _hiddenOptions = [];
+          _hasUsedOneOptionLifeline = false;
+          _hasUsedTwoOptionLifeline = false;
         });
         _syncState(); // Immediate sync for new Q
       }
@@ -304,7 +308,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
                 .fadeIn(),
             const SizedBox(height: 32),
             ..._shuffledOptions
-                .where((opt) => !_fiftyFiftyHiddenOptions.contains(opt))
+                .where((opt) => !_hiddenOptions.contains(opt))
                 .map((opt) => Padding(
               padding: const EdgeInsets.only(bottom: 16),
               child: _AnswerButton(
@@ -372,15 +376,26 @@ class _GameScreenState extends ConsumerState<GameScreen>
   }
 
   Widget _buildPowerups(GameRoomModel room) {
+    final user = ref.read(currentUserProvider).value;
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        _PowerupButton(
-          label: '50/50',
-          icon: Icons.filter_2_rounded,
-          isUsed: _hasUsedFiftyFifty,
+        LifelineButton(
+          label: 'Remove 1',
+          icon: Icons.exposure_minus_1,
+          count: user?.oneOptionLifelines ?? 0,
+          isUsed: _hasUsedOneOptionLifeline,
           isDisabled: _hasAnswered,
-          onTap: () => _useFiftyFifty(room),
+          onTap: () => _useLifeline(room, 'oneOption'),
+        ),
+        const SizedBox(width: 12),
+        LifelineButton(
+          label: 'Remove 2',
+          icon: Icons.exposure_minus_2,
+          count: user?.twoOptionLifelines ?? 0,
+          isUsed: _hasUsedTwoOptionLifeline,
+          isDisabled: _hasAnswered,
+          onTap: () => _useLifeline(room, 'twoOption'),
         ),
       ],
     );
@@ -437,14 +452,45 @@ class _GameScreenState extends ConsumerState<GameScreen>
     }
   }
 
-  void _useFiftyFifty(GameRoomModel room) {
-    if (_hasUsedFiftyFifty || _hasAnswered) return;
-    final question = room.questions[room.currentQuestionIndex];
-    final wrong = _shuffledOptions.where((o) => o != question['correct_answer']).toList()..shuffle();
-    setState(() {
-      _hasUsedFiftyFifty = true;
-      _fiftyFiftyHiddenOptions = wrong.take(2).toList();
-    });
+  void _useLifeline(GameRoomModel room, String type) async {
+    if (_hasAnswered) return;
+    if (type == 'oneOption' && _hasUsedOneOptionLifeline) return;
+    if (type == 'twoOption' && _hasUsedTwoOptionLifeline) return;
+
+    final user = ref.read(currentUserProvider).value;
+    if (user == null) return;
+
+    final count = type == 'oneOption' ? user.oneOptionLifelines : user.twoOptionLifelines;
+    if (count <= 0) return;
+
+    try {
+      await ref.read(gameRepositoryProvider).useLifeline(
+            userId: user.uid,
+            lifelineType: type,
+          );
+
+      final question = room.questions[room.currentQuestionIndex];
+      final availableWrong = _shuffledOptions
+          .where((o) => o != question['correct_answer'] && !_hiddenOptions.contains(o))
+          .toList()
+        ..shuffle();
+
+      setState(() {
+        if (type == 'oneOption') {
+          _hasUsedOneOptionLifeline = true;
+          if (availableWrong.isNotEmpty) {
+            _hiddenOptions.add(availableWrong.first);
+          }
+        } else {
+          _hasUsedTwoOptionLifeline = true;
+          _hiddenOptions.addAll(availableWrong.take(2));
+        }
+      });
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error using lifeline: $e')),
+      );
+    }
   }
 
   Widget _buildArenaBreakerRound(GameRoomModel room) {
@@ -542,44 +588,6 @@ class _PlayerStat extends StatelessWidget {
           ],
         ),
       ],
-    );
-  }
-}
-
-class _PowerupButton extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final bool isUsed;
-  final bool isDisabled;
-  final VoidCallback onTap;
-
-  const _PowerupButton({required this.label, required this.icon, required this.isUsed, required this.isDisabled, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final disabled = isUsed || isDisabled;
-    return GestureDetector(
-      onTap: disabled ? null : onTap,
-      child: AnimatedOpacity(
-        opacity: disabled ? 0.45 : 1,
-        duration: const Duration(milliseconds: 200),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-          decoration: BoxDecoration(
-            color: AppColors.purple.withValues(alpha: 0.14),
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: isUsed ? AppColors.surface : AppColors.purple, width: 1.5),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(isUsed ? Icons.check_circle_rounded : icon, color: isUsed ? AppColors.textMuted : AppColors.purple, size: 18),
-              const SizedBox(width: 8),
-              Text(isUsed ? '$label USED' : label, style: AppTextStyles.label.copyWith(color: isUsed ? AppColors.textMuted : Colors.white, fontWeight: FontWeight.bold)),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

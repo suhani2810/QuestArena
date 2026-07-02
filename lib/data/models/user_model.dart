@@ -21,6 +21,9 @@ class UserModel {
   final int arenaBreakerWins;
   final int arenaBreakerLosses;
   final double averageAccuracy;
+  final int oneOptionLifelines;
+  final int twoOptionLifelines;
+  final int rankProtectionMatches;
 
   UserModel({
     required this.uid,
@@ -43,6 +46,9 @@ class UserModel {
     this.arenaBreakerWins = 0,
     this.arenaBreakerLosses = 0,
     this.averageAccuracy = 0.0,
+    this.oneOptionLifelines = 0,
+    this.twoOptionLifelines = 0,
+    this.rankProtectionMatches = 0,
   });
 
   // Calculated getters (Single source of truth)
@@ -87,6 +93,9 @@ class UserModel {
       arenaBreakerWins: json['arenaBreakerWins'] ?? 0,
       arenaBreakerLosses: json['arenaBreakerLosses'] ?? 0,
       averageAccuracy: (json['averageAccuracy'] ?? 0.0).toDouble(),
+      oneOptionLifelines: json['oneOptionLifelines'] ?? 0,
+      twoOptionLifelines: json['twoOptionLifelines'] ?? 0,
+      rankProtectionMatches: json['rankProtectionMatches'] ?? 0,
     );
   }
 
@@ -113,6 +122,9 @@ class UserModel {
         'arenaBreakerWins': arenaBreakerWins,
         'arenaBreakerLosses': arenaBreakerLosses,
         'averageAccuracy': averageAccuracy,
+        'oneOptionLifelines': oneOptionLifelines,
+        'twoOptionLifelines': twoOptionLifelines,
+        'rankProtectionMatches': rankProtectionMatches,
       };
 
   UserModel copyWith({
@@ -134,6 +146,9 @@ class UserModel {
     int? arenaBreakerWins,
     int? arenaBreakerLosses,
     double? averageAccuracy,
+    int? oneOptionLifelines,
+    int? twoOptionLifelines,
+    int? rankProtectionMatches,
     bool clearSubRank = false,
   }) {
     return UserModel(
@@ -157,6 +172,10 @@ class UserModel {
       arenaBreakerWins: arenaBreakerWins ?? this.arenaBreakerWins,
       arenaBreakerLosses: arenaBreakerLosses ?? this.arenaBreakerLosses,
       averageAccuracy: averageAccuracy ?? this.averageAccuracy,
+      oneOptionLifelines: oneOptionLifelines ?? this.oneOptionLifelines,
+      twoOptionLifelines: twoOptionLifelines ?? this.twoOptionLifelines,
+      rankProtectionMatches:
+          rankProtectionMatches ?? this.rankProtectionMatches,
     );
   }
 }

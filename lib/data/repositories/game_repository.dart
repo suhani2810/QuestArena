@@ -351,11 +351,41 @@ class GameRepository {
     return null;
   }
 
-  Future<void> triggerQuestionsFallback(String roomId) async {
-    await _db.collection('gameRooms').doc(roomId).update({
-      'questions': GameUtils.getFallbackQuestions(),
-      'status': 'active',
-      'questionStartedAt': FieldValue.serverTimestamp(),
+  Future<void> useLifeline({
+    required String userId,
+    required String lifelineType, // 'oneOption' or 'twoOption'
+  }) async {
+    final userRef = _db.collection('users').doc(userId);
+    await _db.runTransaction((transaction) async {
+      final snapshot = await transaction.get(userRef);
+      if (!snapshot.exists) return;
+
+      final field = lifelineType == 'oneOption' ? 'oneOptionLifelines' : 'twoOptionLifelines';
+      final currentCount = snapshot.data()![field] ?? 0;
+
+      if (currentCount > 0) {
+        transaction.update(userRef, {
+          field: FieldValue.increment(-1),
+        });
+      } else {
+        throw Exception('No lifelines remaining');
+      }
+    });
+  }
+
+  Future<void> useRankProtection(String userId) async {
+    final userRef = _db.collection('users').doc(userId);
+    await _db.runTransaction((transaction) async {
+      final snapshot = await transaction.get(userRef);
+      if (!snapshot.exists) return;
+
+      final currentCount = snapshot.data()!['rankProtectionMatches'] ?? 0;
+
+      if (currentCount > 0) {
+        transaction.update(userRef, {
+          'rankProtectionMatches': FieldValue.increment(-1),
+        });
+      }
     });
   }
 

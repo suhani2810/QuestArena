@@ -216,7 +216,7 @@ class _RecentHistorySectionState extends ConsumerState<RecentHistorySection> {
       children: [
         Text('RECENT HISTORY', style: AppTextStyles.label),
         const SizedBox(height: 12),
-        
+
         // Filter Chips Row
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
@@ -244,7 +244,7 @@ class _RecentHistorySectionState extends ConsumerState<RecentHistorySection> {
             }).toList(),
           ),
         ),
-        
+
         const SizedBox(height: 16),
 
         historyAsync.when(
@@ -298,7 +298,7 @@ class _MatchHistoryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final result = match.result;
-    
+
     Color accentColor;
     String statusText;
 
@@ -334,7 +334,7 @@ class _MatchHistoryCard extends StatelessWidget {
             width: 6,
             child: Container(color: accentColor),
           ),
-          
+
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
             child: Column(
@@ -376,7 +376,7 @@ class _MatchHistoryCard extends StatelessWidget {
                     ),
                   ],
                 ),
-                
+
                 const SizedBox(height: 16),
 
                 // Main Info Row
@@ -405,7 +405,7 @@ class _MatchHistoryCard extends StatelessWidget {
                         ],
                       ),
                     ),
-                    
+
                     // Score Box
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -414,6 +414,33 @@ class _MatchHistoryCard extends StatelessWidget {
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.cardBg,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.surface),
+                  ),
+                  child: Row(
+                    children: [
+                      SmartAvatar(
+                        avatarUrl: match.opponentAvatarUrl,
+                        size: 44,
+                        showBorder: true,
+                        showGlow: false,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(match.opponentName, style: AppTextStyles.bodyMd.copyWith(fontWeight: FontWeight.bold)),
+                            Text(isWin ? 'Victory' : (isDraw ? 'Draw' : 'Defeat'), style: AppTextStyles.label.copyWith(fontSize: 10, color: isWin ? AppColors.teal : (isDraw ? AppColors.gold : AppColors.red))),
+                          ],
+                        ),
+                      ),
+                      Text(
                         '${match.playerScore} - ${match.opponentScore}',
                         style: AppTextStyles.display.copyWith(
                           fontSize: 18,

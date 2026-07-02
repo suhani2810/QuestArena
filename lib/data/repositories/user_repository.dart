@@ -115,11 +115,32 @@ class UserRepository {
       );
 
       final wrongAnswers = totalQuestions - correctAnswers;
-      final rankUpdate = RankService.calculateRankUpdate(
+      var rankUpdate = RankService.calculateRankUpdate(
         user: user,
         correctAnswers: correctAnswers,
         wrongAnswers: wrongAnswers,
       );
+
+      bool rankProtectionUsed = false;
+      int remainingRankProtection = user.rankProtectionMatches;
+
+      if (remainingRankProtection > 0 && (rankUpdate.pointsGained < 0 || rankUpdate.demoted)) {
+        rankProtectionUsed = true;
+        remainingRankProtection--;
+        
+        // Reset rank update to original state
+        rankUpdate = RankUpdateResult(
+          oldRank: user.rank,
+          oldSubRank: user.subRank,
+          oldPoints: user.rankPoints,
+          newRank: user.rank,
+          newSubRank: user.subRank,
+          newPoints: user.rankPoints,
+          pointsGained: 0,
+          promoted: false,
+          demoted: false,
+        );
+      }
 
       final totalXp = user.xp + xpRewards.total;
       final newLevel = LevelSystem.getCurrentLevel(totalXp);
@@ -203,11 +224,13 @@ class UserRepository {
         'achievements': achievements,
         'arenaBreakerWins': abWins,
         'arenaBreakerLosses': abLosses,
+        'rankProtectionMatches': remainingRankProtection,
       });
 
       result = MatchEndResult(
         xpRewards: xpRewards,
         rankUpdate: rankUpdate,
+        rankProtectionUsed: rankProtectionUsed,
       );
     });
 

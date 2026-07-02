@@ -29,6 +29,7 @@ import '../widgets/xp_summary_card.dart';
 import '../widgets/rank_badge.dart';
 import '../widgets/rank_progress_bar.dart';
 import '../widgets/smart_avatar.dart';
+import '../widgets/rank_protection.dart';
 import 'home_screen.dart';
 import 'game_screen.dart';
 
@@ -110,6 +111,10 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
       final opponentScore = currentUser.uid == widget.room.player1['uid'] 
           ? (widget.room.player2?['score'] ?? 0)
           : widget.room.player1['score'];
+          
+      final opponentAvatar = currentUser.uid == widget.room.player1['uid']
+          ? (widget.room.player2?['avatarUrl'])
+          : widget.room.player1['avatarUrl'];
 
       final opponentName = currentUser.uid == widget.room.player1['uid']
           ? (widget.room.player2?['username'] ?? 'Opponent')
@@ -118,6 +123,7 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
       final history = MatchModel(
         id: widget.room.roomId,
         opponentName: opponentName,
+        opponentAvatarUrl: opponentAvatar ?? 'f1', // Fallback to first character if missing
         playerScore: myScore,
         opponentScore: opponentScore,
         xpEarned: result?.xpRewards.total ?? (isWinner ? 50 : (isDraw ? 25 : 15)),
@@ -277,12 +283,15 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
 
                   SizedBox(
                     height: 100,
-                    child: isWinner 
+                    child: isWinner
                       ? const Icon(Icons.emoji_events_rounded, size: 80, color: AppColors.gold)
                       : (isDraw ? const Icon(Icons.handshake_rounded, size: 80, color: AppColors.gold) : const Icon(Icons.sentiment_very_dissatisfied_rounded, size: 80, color: AppColors.red)),
                   ).animate().scale(duration: 800.ms, curve: Curves.elasticOut),
 
                   const SizedBox(height: 24),
+
+                  if (_matchResult?.rankProtectionUsed == true)
+                    _buildStatusBanner('RANK PROTECTION USED', AppColors.purple),
 
                   Text(
                     isDraw ? "IT'S A DRAW!" : (isWinner ? 'YOU WON!' : 'YOU LOST!'),
@@ -356,7 +365,7 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
                     
                     const SizedBox(height: 24),
                     
-                    _buildRankSection(_matchResult!.rankUpdate)
+                    _buildRankSection(_matchResult!.rankUpdate, currentUser)
                         .animate()
                         .fadeIn(delay: 600.ms),
                   ],
@@ -383,7 +392,7 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                         ),
                       ).animate(target: otherRequested ? 1 : 0).shimmer(),
-                    
+
                     const SizedBox(height: 12),
                     Text('Offer expires in $_rematchTimer s', style: AppTextStyles.label.copyWith(fontSize: 10)),
                   ],
@@ -393,9 +402,9 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
                   if (isWinner)
                     ElevatedButton(
                       onPressed: () => _showVictoryCardPopUp(
-                        currentUser, 
-                        opponentName, 
-                        myScore, 
+                        currentUser,
+                        opponentName,
+                        myScore,
                         opponentScore,
                         50, // XP
                         20, // Coins
@@ -426,7 +435,7 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
                     child: Text(
                       'CONTINUE TO DASHBOARD',
                       style: AppTextStyles.label.copyWith(
-                        color: AppColors.textSecondary, 
+                        color: AppColors.textSecondary,
                         decoration: TextDecoration.underline,
                         fontSize: 12,
                       ),
@@ -482,6 +491,7 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
   }
 
   Widget _buildRankSection(RankUpdateResult rankUpdate) {
+  Widget _buildRankSection(RankUpdateResult rankUpdate, UserModel? user) {
     final pointsDiff = rankUpdate.pointsGained;
     final pointsColor = pointsDiff >= 0 ? AppColors.teal : AppColors.red;
     final pointsText = pointsDiff >= 0 ? '+$pointsDiff RP' : '$pointsDiff RP';
@@ -517,6 +527,10 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
           ),
           const SizedBox(height: 20),
           RankProgressBar(rank: rankUpdate.newRank, subRank: rankUpdate.newSubRank, points: rankUpdate.newPoints),
+          if (user != null && user.rankProtectionMatches > 0) ...[
+            const SizedBox(height: 12),
+            RankProtectionStatus(remainingMatches: user.rankProtectionMatches),
+          ],
         ],
       ),
     );
