@@ -18,7 +18,7 @@ class LevelBadge extends StatelessWidget {
         border: Border.all(color: AppColors.gold, width: 2),
         boxShadow: [
           BoxShadow(
-            color: AppColors.purple.withOpacity(0.5),
+            color: AppColors.purple.withValues(alpha: 0.5),
             blurRadius: 8,
             spreadRadius: 2,
           ),
