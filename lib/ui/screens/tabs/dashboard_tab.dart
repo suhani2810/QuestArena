@@ -48,7 +48,6 @@ class _DashboardTabState extends ConsumerState<DashboardTab> with TickerProvider
   @override
   Widget build(BuildContext context) {
     final userAsync = ref.watch(currentUserProvider);
-    final historyAsync = ref.watch(matchHistoryProvider);
 
     return userAsync.when(
       loading: () => const Center(child: CircularProgressIndicator(color: AppColors.gold)),
@@ -414,33 +413,6 @@ class _MatchHistoryCard extends StatelessWidget {
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppColors.cardBg,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppColors.surface),
-                  ),
-                  child: Row(
-                    children: [
-                      SmartAvatar(
-                        avatarUrl: match.opponentAvatarUrl,
-                        size: 44,
-                        showBorder: true,
-                        showGlow: false,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(match.opponentName, style: AppTextStyles.bodyMd.copyWith(fontWeight: FontWeight.bold)),
-                            Text(isWin ? 'Victory' : (isDraw ? 'Draw' : 'Defeat'), style: AppTextStyles.label.copyWith(fontSize: 10, color: isWin ? AppColors.teal : (isDraw ? AppColors.gold : AppColors.red))),
-                          ],
-                        ),
-                      ),
-                      Text(
                         '${match.playerScore} - ${match.opponentScore}',
                         style: AppTextStyles.display.copyWith(
                           fontSize: 18,

@@ -395,7 +395,7 @@ class GameRepository {
       final snapshot = await transaction.get(roomRef);
       if (!snapshot.exists) return;
 
-      final data = snapshot.data() as Map<String, dynamic>?;
+      final data = snapshot.data();
       if (data == null) return;
 
       final claimedList = List<String>.from(data['claimedRewards'] ?? []);

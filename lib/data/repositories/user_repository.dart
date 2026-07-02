@@ -217,7 +217,7 @@ class UserRepository {
         'draws': user.draws + (isDraw ? 1 : 0),
         'currentWinStreak': currentStreak,
         'highestWinStreak': highestWinStreak,
-        'lastDailyBonusDate': lastDailyBonusDate != null ? Timestamp.fromDate(lastDailyBonusDate) : null,
+        'lastDailyBonusDate': Timestamp.fromDate(lastDailyBonusDate),
         'rank': rankUpdate.newRank,
         'subRank': rankUpdate.newSubRank,
         'rankPoints': rankUpdate.newPoints,

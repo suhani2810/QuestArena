@@ -8,7 +8,6 @@ import '../../../core/constants/colors.dart';
 import '../../../core/constants/text_styles.dart';
 import '../../../data/models/leaderboard_model.dart';
 import '../../../data/models/user_model.dart';
-import '../../../data/models/match_history_model.dart';
 import '../../../providers/leaderboard_providers.dart';
 import '../../../providers/user_providers.dart';
 import '../../../providers/navigation_providers.dart';
@@ -54,6 +53,7 @@ class _LeaderboardTabState extends ConsumerState<LeaderboardTab> {
         data: (players) {
           return CustomScrollView(
             slivers: [
+              // Leaderboard Header
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
@@ -61,6 +61,7 @@ class _LeaderboardTabState extends ConsumerState<LeaderboardTab> {
                 ),
               ),
 
+              // Players List
               SliverPadding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 sliver: SliverList(
@@ -112,10 +113,10 @@ class _ExpandablePlayerCard extends ConsumerWidget {
       onTap: onTap,
       child: AnimatedScale(
         scale: isExpanded ? 1.02 : 1.0,
-        duration: 400.ms,
+        duration: const Duration(milliseconds: 400),
         curve: Curves.easeOutCubic,
         child: AnimatedContainer(
-          duration: 400.ms,
+          duration: const Duration(milliseconds: 400),
           curve: Curves.easeOutCubic,
           margin: const EdgeInsets.only(bottom: 12),
           padding: EdgeInsets.all(isExpanded ? 20 : 12),
@@ -149,7 +150,7 @@ class _ExpandablePlayerCard extends ConsumerWidget {
                   SizedBox(
                     width: 40,
                     child: isExpanded 
-                      ? Text('${index + 1}', style: AppTextStyles.headline.copyWith(fontSize: 25, color: AppColors.textMuted.withValues(alpha: 0.5)))
+                      ? Text('${index + 1}', style: AppTextStyles.headline.copyWith(fontSize: 28, color: AppColors.textMuted.withValues(alpha: 0.5)))
                       : _RankBadge(index: index),
                   ),
 
@@ -191,7 +192,7 @@ class _ExpandablePlayerCard extends ConsumerWidget {
                         Text(
                           player.username,
                           style: AppTextStyles.headline.copyWith(
-                            fontSize: isExpanded ? 20 : 16,
+                            fontSize: isExpanded ? 24 : 16,
                             color: isMe ? AppColors.gold : AppColors.textPrimary,
                           ),
                         ),
@@ -224,7 +225,7 @@ class _ExpandablePlayerCard extends ConsumerWidget {
 
               // Expanded Details
               AnimatedSize(
-                duration: 450.ms,
+                duration: const Duration(milliseconds: 450),
                 curve: Curves.easeOutCubic,
                 alignment: Alignment.topCenter,
                 child: isExpanded
@@ -249,7 +250,6 @@ class _ExpandedDetails extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final profileAsync = ref.watch(userProfileProvider(uid));
-    final historyAsync = ref.watch(userMatchHistoryProvider(uid));
 
     return profileAsync.when(
       loading: () => const Padding(
@@ -258,101 +258,81 @@ class _ExpandedDetails extends ConsumerWidget {
       ),
       error: (e, s) => Text('Error loading stats', style: AppTextStyles.label.copyWith(color: AppColors.red)),
       data: (user) {
-        return historyAsync.when(
-          loading: () => const Padding(
-            padding: EdgeInsets.symmetric(vertical: 20),
-            child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.gold)),
+        if (user == null) return const SizedBox.shrink();
+
+        final int totalMatches = user.matchesPlayed;
+        final int wins = user.wins;
+        final int streak = user.currentWinStreak;
+        final int xp = user.xp;
+        final String rank = user.rank;
+        final double winRate = user.winRate;
+
+        final achievements = [
+          {'id': 'first_win', 'name': 'First Blood', 'icon': Icons.flash_on_rounded},
+          {'id': 'on_fire', 'name': 'On Fire', 'icon': Icons.whatshot},
+          {'id': 'veteran', 'name': 'Veteran', 'icon': Icons.military_tech},
+          {'id': 'scholar', 'name': 'Scholar', 'icon': Icons.school},
+          {'id': 'arena_breaker', 'name': 'Arena Breaker', 'icon': Icons.security},
+        ];
+
+        final unlockedIds = user.achievements;
+        final unlocked = achievements.where((a) => unlockedIds.contains(a['id'])).toList();
+
+        return Padding(
+          padding: const EdgeInsets.only(top: 24),
+          child: Column(
+            children: [
+              // Main Stats Row (XP, Wins, Streak)
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _StatItem(icon: Icons.stars_rounded, value: '$xp', label: 'XP', color: AppColors.purple),
+                    _StatItem(icon: Icons.emoji_events_rounded, value: '$wins', label: 'WINS', color: AppColors.teal),
+                    _StatItem(icon: Icons.whatshot_rounded, value: '$streak', label: 'STREAK', color: AppColors.red),
+                  ],
+                ),
+              ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.1, end: 0),
+
+              const SizedBox(height: 20),
+
+              // Details Overview List
+              _OverviewRow(label: 'Matches Played', value: '$totalMatches'),
+              _OverviewRow(label: 'Win Rate', value: '${winRate.toStringAsFixed(1)}%'),
+              _OverviewRow(label: 'Current Rank', value: RankSystem.getRankName(rank, user.subRank)),
+              _OverviewRow(label: 'Total XP', value: '$xp'),
+
+              // Achievements Section
+              if (unlocked.isNotEmpty) ...[
+                const SizedBox(height: 24),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('ACHIEVEMENTS', style: AppTextStyles.label.copyWith(fontSize: 10, letterSpacing: 1, color: AppColors.textMuted)),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: unlocked.map((a) => _AchievementChip(icon: a['icon'] as IconData, name: a['name'] as String)).toList(),
+                  ),
+                ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.1, end: 0),
+              ],
+            ],
           ),
-          error: (e, s) => _buildContent(user, []),
-          data: (history) => _buildContent(user, history),
         );
       },
-    );
-  }
-
-  Widget _buildContent(UserModel? user, List<MatchModel> history) {
-    int totalMatches;
-    int wins;
-    int streak;
-    int xp;
-    String rank;
-    double winRate;
-
-    if (isMe && user != null) {
-      totalMatches = user.matchesPlayed;
-      wins = user.wins;
-      streak = user.currentWinStreak;
-      xp = user.xp;
-      rank = user.rank;
-      winRate = user.winRate;
-    } else {
-      // Use history if available for other players, otherwise aggregate
-      totalMatches = history.length > 0 ? history.length : player.totalMatches;
-      wins = history.length > 0 ? history.where((m) => m.result == MatchResult.win).length : player.wins;
-      streak = player.currentWinStreak;
-      xp = player.xp;
-      rank = player.rank;
-      winRate = totalMatches > 0 ? (wins / totalMatches * 100) : 0.0;
-    }
-
-    final achievements = [
-      {'id': 'first_win', 'name': 'First Blood', 'icon': Icons.flash_on_rounded},
-      {'id': 'on_fire', 'name': 'On Fire', 'icon': Icons.whatshot},
-      {'id': 'veteran', 'name': 'Veteran', 'icon': Icons.military_tech},
-      {'id': 'scholar', 'name': 'Scholar', 'icon': Icons.school},
-      {'id': 'arena_breaker', 'name': 'Arena Breaker', 'icon': Icons.security},
-    ];
-
-    final unlockedIds = user?.achievements ?? [];
-    final unlocked = achievements.where((a) => unlockedIds.contains(a['id'])).toList();
-
-    return Padding(
-      padding: const EdgeInsets.only(top: 24),
-      child: Column(
-        children: [
-          // Main Stats Row
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _StatItem(icon: Icons.stars_rounded, value: '$xp', label: 'XP', color: AppColors.purple),
-                _StatItem(icon: Icons.emoji_events_rounded, value: '$wins', label: 'WINS', color: AppColors.teal),
-                _StatItem(icon: Icons.whatshot_rounded, value: '$streak', label: 'STREAK', color: AppColors.red),
-              ],
-            ),
-          ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.1, end: 0),
-
-          const SizedBox(height: 16),
-
-          // Details List
-          _OverviewRow(label: 'Matches Played', value: '$totalMatches'),
-          _OverviewRow(label: 'Win Rate', value: '${winRate.toStringAsFixed(1)}%'),
-          _OverviewRow(label: 'Current Rank', value: RankSystem.getRankName(rank, user?.subRank ?? player.subRank)),
-          _OverviewRow(label: 'Total XP', value: '$xp'),
-
-          if (unlocked.isNotEmpty) ...[
-            const SizedBox(height: 24),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text('ACHIEVEMENTS', style: AppTextStyles.label.copyWith(fontSize: 10, letterSpacing: 1, color: AppColors.textMuted)),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: unlocked.map((a) => _AchievementChip(icon: a['icon'] as IconData, name: a['name'] as String)).toList(),
-              ),
-            ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.1, end: 0),
-          ],
-        ],
-      ),
     );
   }
 }
@@ -371,8 +351,8 @@ class _StatItem extends StatelessWidget {
       children: [
         Icon(icon, color: color, size: 24),
         const SizedBox(height: 8),
-        Text(value, style: AppTextStyles.headline.copyWith(fontSize: 18)),
-        Text(label, style: AppTextStyles.label.copyWith(fontSize: 8, color: AppColors.textMuted)),
+        Text(value, style: AppTextStyles.headline.copyWith(fontSize: 20)),
+        Text(label, style: AppTextStyles.label.copyWith(fontSize: 9, color: AppColors.textMuted)),
       ],
     );
   }
@@ -493,7 +473,6 @@ class _AchievementChip extends StatelessWidget {
 
 class _RankBadge extends StatelessWidget {
   final int index;
-
   const _RankBadge({required this.index});
 
   @override
@@ -505,6 +484,7 @@ class _RankBadge extends StatelessWidget {
     return Text(
       '${index + 1}',
       style: AppTextStyles.headline.copyWith(fontSize: 18, color: AppColors.textMuted),
+      textAlign: TextAlign.center,
     );
   }
 }

@@ -15,7 +15,6 @@ import 'package:confetti/confetti.dart';
 
 import '../../core/constants/colors.dart';
 import '../../core/constants/text_styles.dart';
-import '../../data/services/rank_service.dart';
 import '../../providers/user_providers.dart';
 import '../../providers/game_providers.dart';
 import '../../providers/leaderboard_providers.dart';
@@ -23,13 +22,13 @@ import '../../data/models/game_room_model.dart';
 import '../../data/models/match_history_model.dart';
 import '../../data/models/user_model.dart';
 import '../../data/models/match_end_result.dart';
+import '../../data/services/rank_service.dart';
 import '../../core/utils/level_system.dart';
 import '../widgets/victory_card.dart';
 import '../widgets/xp_summary_card.dart';
 import '../widgets/rank_badge.dart';
 import '../widgets/rank_progress_bar.dart';
 import '../widgets/smart_avatar.dart';
-import '../widgets/rank_protection.dart';
 import 'home_screen.dart';
 import 'game_screen.dart';
 
@@ -111,19 +110,19 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
       final opponentScore = currentUser.uid == widget.room.player1['uid'] 
           ? (widget.room.player2?['score'] ?? 0)
           : widget.room.player1['score'];
+
+      final opponentName = currentUser.uid == widget.room.player1['uid']
+          ? (widget.room.player2?['username'] ?? 'Opponent')
+          : widget.room.player1['username'];
           
       final opponentAvatar = currentUser.uid == widget.room.player1['uid']
           ? (widget.room.player2?['avatarUrl'])
           : widget.room.player1['avatarUrl'];
 
-      final opponentName = currentUser.uid == widget.room.player1['uid']
-          ? (widget.room.player2?['username'] ?? 'Opponent')
-          : widget.room.player1['username'];
-
       final history = MatchModel(
         id: widget.room.roomId,
         opponentName: opponentName,
-        opponentAvatarUrl: opponentAvatar ?? 'f1', // Fallback to first character if missing
+        opponentAvatarUrl: opponentAvatar,
         playerScore: myScore,
         opponentScore: opponentScore,
         xpEarned: result?.xpRewards.total ?? (isWinner ? 50 : (isDraw ? 25 : 15)),
@@ -283,15 +282,12 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
 
                   SizedBox(
                     height: 100,
-                    child: isWinner
+                    child: isWinner 
                       ? const Icon(Icons.emoji_events_rounded, size: 80, color: AppColors.gold)
                       : (isDraw ? const Icon(Icons.handshake_rounded, size: 80, color: AppColors.gold) : const Icon(Icons.sentiment_very_dissatisfied_rounded, size: 80, color: AppColors.red)),
                   ).animate().scale(duration: 800.ms, curve: Curves.elasticOut),
 
                   const SizedBox(height: 24),
-
-                  if (_matchResult?.rankProtectionUsed == true)
-                    _buildStatusBanner('RANK PROTECTION USED', AppColors.purple),
 
                   Text(
                     isDraw ? "IT'S A DRAW!" : (isWinner ? 'YOU WON!' : 'YOU LOST!'),
@@ -365,7 +361,7 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
                     
                     const SizedBox(height: 24),
                     
-                    _buildRankSection(_matchResult!.rankUpdate, currentUser)
+                    _buildRankSection(_matchResult!.rankUpdate)
                         .animate()
                         .fadeIn(delay: 600.ms),
                   ],
@@ -392,7 +388,7 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                         ),
                       ).animate(target: otherRequested ? 1 : 0).shimmer(),
-
+                    
                     const SizedBox(height: 12),
                     Text('Offer expires in $_rematchTimer s', style: AppTextStyles.label.copyWith(fontSize: 10)),
                   ],
@@ -402,9 +398,9 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
                   if (isWinner)
                     ElevatedButton(
                       onPressed: () => _showVictoryCardPopUp(
-                        currentUser,
-                        opponentName,
-                        myScore,
+                        currentUser, 
+                        opponentName, 
+                        myScore, 
                         opponentScore,
                         50, // XP
                         20, // Coins
@@ -435,7 +431,7 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
                     child: Text(
                       'CONTINUE TO DASHBOARD',
                       style: AppTextStyles.label.copyWith(
-                        color: AppColors.textSecondary,
+                        color: AppColors.textSecondary, 
                         decoration: TextDecoration.underline,
                         fontSize: 12,
                       ),
@@ -491,7 +487,6 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
   }
 
   Widget _buildRankSection(RankUpdateResult rankUpdate) {
-  Widget _buildRankSection(RankUpdateResult rankUpdate, UserModel? user) {
     final pointsDiff = rankUpdate.pointsGained;
     final pointsColor = pointsDiff >= 0 ? AppColors.teal : AppColors.red;
     final pointsText = pointsDiff >= 0 ? '+$pointsDiff RP' : '$pointsDiff RP';
@@ -527,10 +522,6 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
           ),
           const SizedBox(height: 20),
           RankProgressBar(rank: rankUpdate.newRank, subRank: rankUpdate.newSubRank, points: rankUpdate.newPoints),
-          if (user != null && user.rankProtectionMatches > 0) ...[
-            const SizedBox(height: 12),
-            RankProtectionStatus(remainingMatches: user.rankProtectionMatches),
-          ],
         ],
       ),
     );
@@ -577,66 +568,6 @@ class _PlayerSummary extends StatelessWidget {
         const SizedBox(height: 12),
         Text(username, style: AppTextStyles.headline.copyWith(fontSize: 14)),
         Text(rank, style: AppTextStyles.label.copyWith(color: AppColors.gold, fontSize: 10)),
-      ],
-    );
-  }
-}
-
-class _RewardCard extends StatelessWidget {
-  final String label;
-  final String value;
-  final IconData icon;
-  final Color color;
-
-  const _RewardCard({required this.label, required this.value, required this.icon, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.cardBg,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.surface),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: color, size: 24),
-          const SizedBox(height: 8),
-          Text(label, style: AppTextStyles.label.copyWith(fontSize: 8, color: AppColors.textSecondary)),
-          Text(value, style: AppTextStyles.headline.copyWith(fontSize: 16, color: color)),
-        ],
-      ),
-    );
-  }
-}
-
-class _RewardItem extends StatelessWidget {
-  final String label;
-  final String value;
-  final IconData icon;
-  final Color color;
-  final bool isProcessing;
-
-  const _RewardItem({
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.color,
-    this.isProcessing = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        if (isProcessing)
-          const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
-        else
-          Icon(icon, color: color, size: 20),
-        const SizedBox(height: 4),
-        Text(value, style: AppTextStyles.headline.copyWith(fontSize: 14, color: color)),
-        Text(label, style: AppTextStyles.label.copyWith(fontSize: 8, color: AppColors.textSecondary)),
       ],
     );
   }
