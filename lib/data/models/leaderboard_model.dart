@@ -15,6 +15,7 @@ class LeaderboardModel {
   final int draws;
   final int currentWinStreak;
   final double averageAccuracy;
+  final int eloRating;
 
   LeaderboardModel({
     required this.uid,
@@ -29,6 +30,7 @@ class LeaderboardModel {
     this.draws = 0,
     this.currentWinStreak = 0,
     this.averageAccuracy = 0.0,
+    this.eloRating = 1200,
   });
 
   // Calculated values
@@ -56,6 +58,7 @@ class LeaderboardModel {
       draws: json['draws'] ?? json['totalDraws'] ?? 0,
       currentWinStreak: json['currentWinStreak'] ?? json['currentStreak'] ?? 0,
       averageAccuracy: (json['averageAccuracy'] ?? 0).toDouble(),
+      eloRating: json['eloRating'] ?? 1200,
     );
   }
 
@@ -72,5 +75,6 @@ class LeaderboardModel {
     'draws': draws,
     'currentWinStreak': currentWinStreak,
     'averageAccuracy': averageAccuracy,
+    'eloRating': eloRating,
   };
 }

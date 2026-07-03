@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'auth_providers.dart';
 import '../data/repositories/leaderboard_repository.dart';
 import '../data/models/leaderboard_model.dart';
-import '../core/errors/result.dart';
 
 final leaderboardRepositoryProvider = Provider((ref) => LeaderboardRepository());
 

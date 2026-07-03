@@ -18,6 +18,19 @@ import 'package:questarena/ui/widgets/smart_avatar.dart';
 import 'package:questarena/ui/screens/character_select_screen.dart';
 
 import 'leaderboard_tab.dart';
+import '../../../core/constants/colors.dart';
+import '../../../core/constants/text_styles.dart';
+import '../../../core/utils/rank_system.dart';
+import '../../../providers/user_providers.dart';
+import '../../../providers/auth_providers.dart';
+import '../../../providers/leaderboard_providers.dart';
+import '../../widgets/character_avatar.dart';
+import '../../widgets/xp_progress_bar.dart';
+import '../../widgets/rank_progress_bar.dart';
+import '../../widgets/neon_swirl_background.dart';
+import '../../widgets/smart_avatar.dart';
+import '../character_select_screen.dart';
+import 'edit_profile_screen.dart';
 
 class ProfileTab extends ConsumerStatefulWidget {
   const ProfileTab({super.key});
@@ -67,6 +80,7 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with SingleTickerProvid
       builder: (context) => AlertDialog(
         backgroundColor: AppColors.cardBg,
         title: Text('DELETE ACCOUNT?', style: AppTextStyles.headline.copyWith(color: AppColors.red)),
+        title: const Text('Delete Account?', style: TextStyle(color: Colors.white)),
         content: const Text(
           'This action is permanent. All your XP, coins, and achievements will be lost forever.',
           style: TextStyle(color: AppColors.textSecondary),
@@ -224,6 +238,19 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with SingleTickerProvid
                                       if (context.mounted) Navigator.pop(context);
                                     },
                                   ),
+                                );
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: const BoxDecoration(
+                                  color: AppColors.neonViolet,
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black26,
+                                      blurRadius: 8,
+                                    )
+                                  ],
                                 ),
                               );
                             },
@@ -258,6 +285,27 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with SingleTickerProvid
                       Text(
                         RankSystem.getRankName(user.rank, user.subRank),
                         style: AppTextStyles.label.copyWith(color: AppColors.gold, fontWeight: FontWeight.bold),
+                      ),
+                      
+                      const SizedBox(height: 16),
+
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const EditProfileScreen(),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.edit, size: 16, color: Colors.white),
+                        label: const Text('Edit Details', style: TextStyle(color: Colors.white)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.purple.withValues(alpha: 0.5),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
                       ),
 
                       if (isMvp) ...[
