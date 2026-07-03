@@ -8,6 +8,8 @@ import '../../providers/user_providers.dart';
 import '../../providers/streak_providers.dart';
 import '../../providers/achievement_providers.dart';
 import '../../providers/avatar_providers.dart';
+import '../../providers/border_providers.dart';
+import '../../core/constants/borders.dart';
 import '../../core/errors/result.dart';
 import 'tabs/dashboard_tab.dart';
 import 'tabs/battle_tab.dart';
@@ -15,6 +17,7 @@ import 'tabs/leaderboard_tab.dart';
 import 'tabs/profile_tab.dart';
 import '../widgets/streak_reward_popup.dart';
 import '../widgets/achievement_popup.dart';
+import '../widgets/weekly_reward_popup.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -26,6 +29,7 @@ class HomeScreen extends ConsumerStatefulWidget {
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   int _selectedIndex = 0;
   bool _checkedDailyReward = false;
+  bool _checkedWeeklyReward = false;
   bool _syncedRetroactive = false;
 
   final List<Widget> _tabs = [
@@ -40,8 +44,37 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkDailyReward();
+      _checkWeeklyReward();
       _syncRetroactiveData();
     });
+  }
+
+  void _checkWeeklyReward() async {
+    if (_checkedWeeklyReward) return;
+    
+    final user = ref.read(currentUserProvider).value;
+    if (user == null) return;
+
+    final weeklyRewards = await ref.read(weeklyRewardProvider.future);
+    if (weeklyRewards != null && mounted) {
+      _checkedWeeklyReward = true;
+      
+      final border = AppBorders.getBorderById(weeklyRewards['borderId']);
+
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => WeeklyRewardPopup(
+          league: weeklyRewards['league'],
+          coins: weeklyRewards['coins'],
+          borderName: border.name != 'None' ? border.name : null,
+          onClaim: () async {
+            await ref.read(borderServiceProvider).claimWeeklyReward(user);
+            if (context.mounted) Navigator.pop(context);
+          },
+        ),
+      );
+    }
   }
 
   void _syncRetroactiveData() async {

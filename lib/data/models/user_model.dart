@@ -19,6 +19,11 @@ class UserModel {
   final int highestWinStreak;
   final List<String> achievements;
   final List<String> unlockedAvatars;
+  final List<String> unlockedBorders;
+  final String? selectedBorder;
+  final int weeklyMatchesPlayed;
+  final DateTime? lastWeeklyRewardDate;
+  final String? weeklyLeague;
   final Map<String, int> powerUps;
 
   // Coin & Streak System Fields
@@ -58,6 +63,11 @@ class UserModel {
     this.highestWinStreak = 0,
     this.achievements = const [],
     this.unlockedAvatars = const [],
+    this.unlockedBorders = const [],
+    this.selectedBorder,
+    this.weeklyMatchesPlayed = 0,
+    this.lastWeeklyRewardDate,
+    this.weeklyLeague,
     this.powerUps = const {'fiftyFifty': 5, 'timeFreeze': 5},
     this.todayCoinsEarned = 0,
     DateTime? lastCoinResetDate,
@@ -97,6 +107,13 @@ class UserModel {
       highestWinStreak: json['highestWinStreak'] ?? 0,
       achievements: List<String>.from(json['achievements'] ?? []),
       unlockedAvatars: List<String>.from(json['unlockedAvatars'] ?? []),
+      unlockedBorders: List<String>.from(json['unlockedBorders'] ?? []),
+      selectedBorder: json['selectedBorder'],
+      weeklyMatchesPlayed: json['weeklyMatchesPlayed'] ?? 0,
+      lastWeeklyRewardDate: json['lastWeeklyRewardDate'] != null
+          ? (json['lastWeeklyRewardDate'] as Timestamp).toDate()
+          : null,
+      weeklyLeague: json['weeklyLeague'],
       powerUps: Map<String, int>.from(json['powerUps'] ?? {'fiftyFifty': 5, 'timeFreeze': 5}),
       todayCoinsEarned: json['todayCoinsEarned'] ?? 0,
       lastCoinResetDate: json['lastCoinResetDate'] != null
@@ -142,6 +159,11 @@ class UserModel {
         'highestWinStreak': highestWinStreak,
         'achievements': achievements,
         'unlockedAvatars': unlockedAvatars,
+        'unlockedBorders': unlockedBorders,
+        'selectedBorder': selectedBorder,
+        'weeklyMatchesPlayed': weeklyMatchesPlayed,
+        'lastWeeklyRewardDate': lastWeeklyRewardDate != null ? Timestamp.fromDate(lastWeeklyRewardDate!) : null,
+        'weeklyLeague': weeklyLeague,
         'powerUps': powerUps,
         'todayCoinsEarned': todayCoinsEarned,
         'lastCoinResetDate': lastCoinResetDate,
@@ -184,6 +206,11 @@ class UserModel {
     DateTime? lastDailyBonusDate,
     List<String>? achievements,
     List<String>? unlockedAvatars,
+    List<String>? unlockedBorders,
+    String? selectedBorder,
+    int? weeklyMatchesPlayed,
+    DateTime? lastWeeklyRewardDate,
+    String? weeklyLeague,
     Map<String, int>? powerUps,
     int? arenaBreakerWins,
     int? arenaBreakerLosses,
@@ -219,6 +246,11 @@ class UserModel {
       lastDailyBonusDate: lastDailyBonusDate ?? this.lastDailyBonusDate,
       achievements: achievements ?? this.achievements,
       unlockedAvatars: unlockedAvatars ?? this.unlockedAvatars,
+      unlockedBorders: unlockedBorders ?? this.unlockedBorders,
+      selectedBorder: selectedBorder ?? this.selectedBorder,
+      weeklyMatchesPlayed: weeklyMatchesPlayed ?? this.weeklyMatchesPlayed,
+      lastWeeklyRewardDate: lastWeeklyRewardDate ?? this.lastWeeklyRewardDate,
+      weeklyLeague: weeklyLeague ?? this.weeklyLeague,
       powerUps: powerUps ?? this.powerUps,
       arenaBreakerWins: arenaBreakerWins ?? this.arenaBreakerWins,
       arenaBreakerLosses: arenaBreakerLosses ?? this.arenaBreakerLosses,

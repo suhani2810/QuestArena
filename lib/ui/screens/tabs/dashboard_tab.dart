@@ -9,6 +9,7 @@ import '../../../providers/coin_providers.dart';
 import '../../widgets/rank_badge.dart';
 import '../../widgets/xp_progress_bar.dart';
 import '../../widgets/smart_avatar.dart';
+import '../../widgets/bordered_avatar.dart';
 import '../../widgets/neon_swirl_background.dart';
 import '../store_screen.dart';
 
@@ -141,7 +142,7 @@ class _DashboardTabState extends ConsumerState<DashboardTab> with TickerProvider
               Stack(
                 alignment: Alignment.bottomRight,
                 children: [
-                  SmartAvatar(
+                  BorderedAvatar(
                     avatarUrl: user.avatarUrl,
                     rank: user.rank,
                     size: 80,

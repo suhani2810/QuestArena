@@ -9,8 +9,9 @@ import '../../../providers/achievement_providers.dart';
 import '../../../data/models/achievement_model.dart';
 import '../../../core/errors/result.dart';
 import '../../widgets/animated_coin_counter.dart';
-import '../../widgets/smart_avatar.dart';
+import '../../widgets/bordered_avatar.dart';
 import '../avatar_selection_screen.dart';
+import '../border_selection_screen.dart';
 
 class ProfileTab extends ConsumerStatefulWidget {
   const ProfileTab({super.key});
@@ -70,18 +71,11 @@ class _ProfileTabState extends ConsumerState<ProfileTab> {
                     ),
                     Hero(
                       tag: 'selected_avatar',
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(color: AppColors.gold, width: 2),
-                        ),
-                        child: SmartAvatar(
-                          avatarUrl: user.avatarUrl,
-                          rank: user.rank,
-                          size: 100,
-                          showBorder: false,
-                        ),
+                      child: BorderedAvatar(
+                        avatarUrl: user.avatarUrl,
+                        rank: user.rank,
+                        size: 110,
+                        showGlow: true,
                       ),
                     ),
                   ],
@@ -93,23 +87,46 @@ class _ProfileTabState extends ConsumerState<ProfileTab> {
 
                 const SizedBox(height: 12),
                 
-                // CHANGE AVATAR BUTTON
-                OutlinedButton.icon(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const AvatarSelectionScreen()),
-                    );
-                  },
-                  icon: const Icon(Icons.edit_rounded, size: 16),
-                  label: const Text('CHANGE AVATAR'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.gold,
-                    side: const BorderSide(color: AppColors.gold, width: 1.5),
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                    textStyle: AppTextStyles.label.copyWith(fontWeight: FontWeight.bold),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
+                // CHANGE BUTTONS
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const AvatarSelectionScreen()),
+                        );
+                      },
+                      icon: const Icon(Icons.person_rounded, size: 16),
+                      label: const Text('AVATAR'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.gold,
+                        side: const BorderSide(color: AppColors.gold, width: 1.5),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        textStyle: AppTextStyles.label.copyWith(fontWeight: FontWeight.bold, fontSize: 10),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const BorderSelectionScreen()),
+                        );
+                      },
+                      icon: const Icon(Icons.workspace_premium_rounded, size: 16),
+                      label: const Text('BORDER'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.neonCyan,
+                        side: const BorderSide(color: AppColors.neonCyan, width: 1.5),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        textStyle: AppTextStyles.label.copyWith(fontWeight: FontWeight.bold, fontSize: 10),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ],
                 ),
 
                 const SizedBox(height: 24),

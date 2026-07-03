@@ -167,6 +167,7 @@ class UserRepository {
         'losses': user.losses + (!isWin && !isDraw ? 1 : 0),
         'draws': user.draws + (isDraw ? 1 : 0),
         'matchesPlayed': user.matchesPlayed + 1,
+        'weeklyMatchesPlayed': user.weeklyMatchesPlayed + 1,
         'currentWinStreak': currentWinStreak,
         'highestWinStreak': highestWinStreak,
         'lastDailyBonusDate': lastDailyBonusDate != null ? Timestamp.fromDate(lastDailyBonusDate) : null,
