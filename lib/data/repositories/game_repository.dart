@@ -488,10 +488,11 @@ class GameRepository {
     await _db.runTransaction((transaction) async {
       final snapshot = await transaction.get(roomRef);
       if (!snapshot.exists) return;
-      
+
       final data = snapshot.data();
-      final claimedList = List<String>.from(data?['claimedRewards'] ?? []);
-      
+      if (data == null) return;
+
+      final claimedList = List<String>.from(data['claimedRewards'] ?? []);
       if (claimedList.contains(userId)) return; // Already claimed
 
       claimedList.add(userId);

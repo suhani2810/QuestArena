@@ -1,3 +1,6 @@
+// WHAT THIS FILE DOES:
+// The entry point for all game modes.
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -11,7 +14,8 @@ import '../../widgets/category_picker_sheet.dart';
 import '../../widgets/neon_swirl_background.dart';
 import '../matchmaking_screen.dart';
 import '../private_room_screen.dart';
-import '../practice_screen.dart';
+import '../../../features/practice/screens/practice_setup_screen.dart';
+import '../../widgets/category_picker_sheet.dart';
 
 class BattleTab extends ConsumerStatefulWidget {
   const BattleTab({super.key});
@@ -106,6 +110,9 @@ class _BattleTabState extends ConsumerState<BattleTab> with TickerProviderStateM
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Text('BATTLE HUB', style: AppTextStyles.display),
+                Text('Select your challenge', style: AppTextStyles.label),
+
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -134,7 +141,7 @@ class _BattleTabState extends ConsumerState<BattleTab> with TickerProviderStateM
                 ),
                 
                 const SizedBox(height: 40),
-                
+
                 _BattleModeCard(
                   title: 'RANKED MATCH',
                   subtitle: _isStartingMatch ? 'Starting...' : 'Compete for XP and Rank',
@@ -142,9 +149,9 @@ class _BattleTabState extends ConsumerState<BattleTab> with TickerProviderStateM
                   color: AppColors.purple,
                   onTap: _isStartingMatch ? () {} : _chooseAndStartMatch,
                 ),
-                
+
                 const SizedBox(height: 16),
-                
+
                 _BattleModeCard(
                   title: 'PRIVATE DUEL',
                   subtitle: 'Play against a friend',
@@ -154,16 +161,16 @@ class _BattleTabState extends ConsumerState<BattleTab> with TickerProviderStateM
                     Navigator.push(context, MaterialPageRoute(builder: (_) => const PrivateRoomScreen()));
                   },
                 ),
-                
+
                 const SizedBox(height: 16),
-                
+
                 _BattleModeCard(
                   title: 'PRACTICE',
                   subtitle: 'Sharpen your skills (No XP)',
                   icon: Icons.psychology_rounded,
                   color: AppColors.teal,
                   onTap: () {
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => const PracticeScreen()));
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const PracticeSetupScreen()));
                   },
                 ),
               ],
@@ -229,7 +236,7 @@ class _BattleModeCard extends StatelessWidget {
                 ],
               ),
             ),
-            Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
+            const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
           ],
         ),
       ),
