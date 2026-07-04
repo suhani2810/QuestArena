@@ -1,11 +1,11 @@
-// WHAT THIS FILE DOES:
-// Allows the player to update their profile (username and avatar).
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import '../../../providers/user_providers.dart';
 import '../../../core/constants/colors.dart';
 import '../../../core/constants/text_styles.dart';
+import '../../widgets/smart_avatar.dart';
+import '../../widgets/character_avatar.dart';
 
 class EditProfileScreen extends ConsumerStatefulWidget {
   const EditProfileScreen({super.key});
@@ -16,17 +16,8 @@ class EditProfileScreen extends ConsumerStatefulWidget {
 
 class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   final TextEditingController _usernameController = TextEditingController();
-  String? _selectedAvatar;
+  String? _selectedAvatarId;
   bool _isSaving = false;
-
-  final List<String> avatars = [
-    'https://api.dicebear.com/7.x/avataaars/png?seed=Felix',
-    'https://api.dicebear.com/7.x/avataaars/png?seed=Aneka',
-    'https://api.dicebear.com/7.x/avataaars/png?seed=Buddy',
-    'https://api.dicebear.com/7.x/avataaars/png?seed=Max',
-    'https://api.dicebear.com/7.x/avataaars/png?seed=Luna',
-    'https://api.dicebear.com/7.x/avataaars/png?seed=Leo',
-  ];
 
   @override
   void initState() {
@@ -34,7 +25,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     final user = ref.read(currentUserProvider).value;
     if (user != null) {
       _usernameController.text = user.username;
-      _selectedAvatar = user.avatarUrl ?? avatars.first;
+      _selectedAvatarId = user.avatarUrl ?? kCharacters.first.id;
     }
   }
 
@@ -50,34 +41,23 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
 
     final newUsername = _usernameController.text.trim();
     if (newUsername.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Username cannot be empty')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Username cannot be empty')));
       return;
     }
 
     setState(() => _isSaving = true);
-
     try {
       final updatedUser = user.copyWith(
         username: newUsername,
-        avatarUrl: _selectedAvatar,
+        avatarUrl: _selectedAvatarId,
       );
-
       await ref.read(userRepositoryProvider).updateUserProfile(updatedUser);
-
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profile updated successfully')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile updated successfully!')));
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -88,9 +68,10 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     return Scaffold(
       backgroundColor: AppColors.primaryBg,
       appBar: AppBar(
-        title: Text('EDIT PROFILE', style: AppTextStyles.display.copyWith(fontSize: 18)),
+        title: Text('EDIT PROFILE', style: AppTextStyles.display.copyWith(fontSize: 18, letterSpacing: 2)),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        centerTitle: true,
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -101,99 +82,83 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
               Center(
                 child: Stack(
                   children: [
-                    CircleAvatar(
-                      radius: 60,
-                      backgroundColor: AppColors.surface,
-                      backgroundImage: _selectedAvatar != null ? NetworkImage(_selectedAvatar!) : null,
-                      child: _selectedAvatar == null ? const Icon(Icons.person, size: 60) : null,
-                    ),
+                    SmartAvatar(avatarUrl: _selectedAvatarId, size: 120, showBorder: true, showGlow: true),
                     Positioned(
                       bottom: 0,
                       right: 0,
                       child: Container(
                         padding: const EdgeInsets.all(8),
-                        decoration: const BoxDecoration(
-                          color: AppColors.purple,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.camera_alt_rounded, size: 20, color: Colors.white),
+                        decoration: const BoxDecoration(color: AppColors.neonViolet, shape: BoxShape.circle),
+                        child: const Icon(Icons.check_rounded, size: 20, color: Colors.white),
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 40),
 
-              Text('CHOOSE AVATAR', style: AppTextStyles.label),
+              Text('SELECT CHARACTER', style: AppTextStyles.label.copyWith(letterSpacing: 2, color: AppColors.textMuted)),
               const SizedBox(height: 16),
-              SizedBox(
-                height: 80,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: avatars.length,
-                  itemBuilder: (context, index) {
-                    final avatar = avatars[index];
-                    final isSelected = _selectedAvatar == avatar;
-
-                    return GestureDetector(
-                      onTap: () => setState(() => _selectedAvatar = avatar),
-                      child: Container(
-                        margin: const EdgeInsets.only(right: 12),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: isSelected ? AppColors.purple : Colors.transparent,
-                            width: 3,
-                          ),
-                        ),
-                        child: CircleAvatar(
-                          radius: 35,
-                          backgroundColor: AppColors.surface,
-                          backgroundImage: NetworkImage(avatar),
-                        ),
-                      ),
-                    );
-                  },
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 16,
                 ),
+                itemCount: kCharacters.length,
+                itemBuilder: (context, index) {
+                  final character = kCharacters[index];
+                  final isSelected = _selectedAvatarId == character.id;
+                  return GestureDetector(
+                    onTap: () => setState(() => _selectedAvatarId = character.id),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: isSelected ? AppColors.gold : AppColors.surface, width: 2),
+                        boxShadow: isSelected ? [BoxShadow(color: AppColors.gold.withValues(alpha: 0.15), blurRadius: 10)] : null,
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(18),
+                        child: SmartAvatar(avatarUrl: character.id, size: 60, showBorder: false),
+                      ),
+                    ),
+                  ).animate(target: isSelected ? 1 : 0).scale(begin: const Offset(1, 1), end: const Offset(1.1, 1.1));
+                },
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 40),
 
-              Text('USERNAME', style: AppTextStyles.label),
+              Text('USERNAME', style: AppTextStyles.label.copyWith(letterSpacing: 2, color: AppColors.textMuted)),
               const SizedBox(height: 12),
               TextField(
                 controller: _usernameController,
-                style: AppTextStyles.bodyMd,
+                style: AppTextStyles.headline.copyWith(fontSize: 18),
                 decoration: InputDecoration(
                   filled: true,
                   fillColor: AppColors.cardBg,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppColors.surface),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppColors.surface),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppColors.purple),
-                  ),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                  prefixIcon: const Icon(Icons.person_rounded, color: AppColors.purple),
+                  hintText: 'Enter username',
+                  hintStyle: const TextStyle(color: AppColors.textMuted),
                 ),
               ),
               const SizedBox(height: 48),
 
               SizedBox(
                 width: double.infinity,
-                height: 56,
                 child: ElevatedButton(
                   onPressed: _isSaving ? null : _saveProfile,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.purple,
+                    backgroundColor: AppColors.gold,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 18),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   ),
                   child: _isSaving
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text('SAVE CHANGES', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
+                      ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2))
+                      : const Text('SAVE PROFILE', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1.5)),
                 ),
               ),
             ],

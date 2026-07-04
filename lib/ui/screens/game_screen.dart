@@ -1,6 +1,6 @@
 // WHAT THIS FILE DOES:
 // Optimized core quiz screen.
-// Features: Heartbeat, Robust Reconnect, Independent Match Progression.
+// Features: Heartbeat, Robust Reconnect, Independent Match Progression, Decluttered Power-ups.
 
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -42,6 +42,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
   int? _timeoutRevealQuestionIndex;
   bool _hasUsedOneOptionLifeline = false;
   bool _hasUsedTwoOptionLifeline = false;
+  bool _showPowerupMenu = false;
 
   // Heartbeat & Timer state
   Timer? _heartbeatTimer;
@@ -171,6 +172,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
       _hasAnswered = true;
       _isRevealingTimeoutAnswer = true;
       _timeoutRevealQuestionIndex = timedOutIndex;
+      _showPowerupMenu = false;
     });
 
     await Future.delayed(const Duration(seconds: 2));
@@ -208,6 +210,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
     setState(() {
       _selectedAnswer = answer;
       _hasAnswered = true;
+      _showPowerupMenu = false;
     });
     _timerController.stop();
 
@@ -243,6 +246,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
     setState(() {
       _selectedAnswer = answer;
       _hasAnswered = true;
+      _showPowerupMenu = false;
     });
     _timerController.stop();
 
@@ -300,6 +304,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
           _timeoutRevealQuestionIndex = null;
           _hasUsedOneOptionLifeline = false;
           _hasUsedTwoOptionLifeline = false;
+          _showPowerupMenu = false;
         });
         _syncState();
       }
@@ -375,6 +380,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
               child: Stack(
                 children: [
                   _buildMainUI(room),
+                  if (_showPowerupMenu) _buildPowerupOverlay(room),
                   if (_isOpponentDisconnected) _buildDisconnectBanner(),
                   _buildFreezeOverlay(room),
                 ],
@@ -382,6 +388,11 @@ class _GameScreenState extends ConsumerState<GameScreen>
             );
           },
         ),
+        floatingActionButton: roomAsync.value?.status == 'active' ? FloatingActionButton(
+          onPressed: () => setState(() => _showPowerupMenu = !_showPowerupMenu),
+          backgroundColor: _showPowerupMenu ? AppColors.neonPink : AppColors.purple,
+          child: Icon(_showPowerupMenu ? Icons.close_rounded : Icons.bolt_rounded, color: Colors.white),
+        ) : null,
       ),
     );
   }
@@ -420,7 +431,6 @@ class _GameScreenState extends ConsumerState<GameScreen>
                 physics: const BouncingScrollPhysics(),
                 child: Column(
                   children: [
-                    _buildPowerups(room),
                     const SizedBox(height: 24),
                     Text(GameUtils.decodeHtmlEntities(question['question']),
                             style: AppTextStyles.headline, textAlign: TextAlign.center)
@@ -457,6 +467,85 @@ class _GameScreenState extends ConsumerState<GameScreen>
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildPowerupOverlay(GameRoomModel room) {
+    final user = ref.read(currentUserProvider).value;
+    final uid = user?.uid;
+    final shieldBlocks = Map<String, dynamic>.from(room.powerups['shieldBonusBlocks'] ?? {});
+    final shieldState = uid == null ? <String, dynamic>{} : Map<String, dynamic>.from(shieldBlocks[uid] ?? {});
+    final hasUsedShield = shieldState.isNotEmpty;
+    final isShieldActiveThisQuestion = shieldState['questionIndex'] == room.currentQuestionIndex;
+    final shieldUnlocked = _currentCorrectStreak(room) >= 2;
+    final opponentAlreadyAnswered = _opponentHasAnsweredCurrentQuestion(room);
+
+    final oneCount = user?.oneOptionLifelines ?? 0;
+    final twoCount = user?.twoOptionLifelines ?? 0;
+
+    final usedFreeze = Map<String, dynamic>.from(room.powerups['usedFreeze'] ?? {});
+    final hasUsedFreeze = usedFreeze[uid] == true;
+
+    return Positioned(
+      bottom: 80,
+      right: 16,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if (oneCount > 0 || _hasUsedOneOptionLifeline)
+            _buildPowerupItem(
+              child: LifelineButton(
+                label: 'Remove 1',
+                icon: Icons.exposure_minus_1,
+                count: oneCount,
+                isUsed: _hasUsedOneOptionLifeline,
+                isDisabled: _hasAnswered,
+                onTap: () => _useLifeline(room, 'oneOption'),
+              ),
+            ),
+          const SizedBox(height: 12),
+          if (twoCount > 0 || _hasUsedTwoOptionLifeline)
+            _buildPowerupItem(
+              child: LifelineButton(
+                label: 'Remove 2',
+                icon: Icons.exposure_minus_2,
+                count: twoCount,
+                isUsed: _hasUsedTwoOptionLifeline,
+                isDisabled: _hasAnswered,
+                onTap: () => _useLifeline(room, 'twoOption'),
+              ),
+            ),
+          const SizedBox(height: 12),
+          _buildPowerupItem(
+            child: _PowerupButton(
+              label: isShieldActiveThisQuestion ? 'SHIELD ON' : 'SHIELD',
+              icon: Icons.shield_rounded,
+              isUsed: hasUsedShield,
+              isDisabled: !shieldUnlocked || _hasAnswered || opponentAlreadyAnswered || _isActivatingShield,
+              onTap: () => _useShield(room),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _buildPowerupItem(
+            child: _PowerupButton(
+              label: hasUsedFreeze ? 'USED' : 'FREEZE (1)',
+              icon: Icons.ac_unit_rounded,
+              isUsed: hasUsedFreeze,
+              isDisabled: _hasAnswered || _isActivatingFreeze,
+              onTap: () => _useFreeze(room),
+            ),
+          ),
+        ],
+      ).animate().slideY(begin: 0.1, end: 0).fadeIn(),
+    );
+  }
+
+  Widget _buildPowerupItem({required Widget child}) {
+    return Container(
+      decoration: BoxDecoration(
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 4))],
+      ),
+      child: child,
     );
   }
 
@@ -531,66 +620,6 @@ class _GameScreenState extends ConsumerState<GameScreen>
     );
   }
 
-  Widget _buildPowerups(GameRoomModel room) {
-    final user = ref.read(currentUserProvider).value;
-    final uid = user?.uid;
-    final shieldBlocks = Map<String, dynamic>.from(
-      room.powerups['shieldBonusBlocks'] ?? {},
-    );
-    final shieldState = uid == null
-        ? <String, dynamic>{}
-        : Map<String, dynamic>.from(shieldBlocks[uid] ?? {});
-    final hasUsedShield = shieldState.isNotEmpty;
-    final isShieldActiveThisQuestion =
-        shieldState['questionIndex'] == room.currentQuestionIndex;
-    final shieldUnlocked = _currentCorrectStreak(room) >= 2;
-    final opponentAlreadyAnswered = _opponentHasAnsweredCurrentQuestion(room);
-
-    final usedFreeze = Map<String, dynamic>.from(room.powerups['usedFreeze'] ?? {});
-    final hasUsedFreeze = usedFreeze[uid] == true;
-
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        LifelineButton(
-          label: 'Remove 1',
-          icon: Icons.exposure_minus_1,
-          count: user?.oneOptionLifelines ?? 0,
-          isUsed: _hasUsedOneOptionLifeline,
-          isDisabled: _hasAnswered,
-          onTap: () => _useLifeline(room, 'oneOption'),
-        ),
-        const SizedBox(width: 12),
-        LifelineButton(
-          label: 'Remove 2',
-          icon: Icons.exposure_minus_2,
-          count: user?.twoOptionLifelines ?? 0,
-          isUsed: _hasUsedTwoOptionLifeline,
-          isDisabled: _hasAnswered,
-          onTap: () => _useLifeline(room, 'twoOption'),
-        ),
-        const SizedBox(width: 12),
-        _PowerupButton(
-          label: isShieldActiveThisQuestion ? 'SHIELD ON' : 'SHIELD',
-          icon: Icons.shield_rounded,
-          isUsed: hasUsedShield,
-          isDisabled: !shieldUnlocked ||
-              _hasAnswered ||
-              opponentAlreadyAnswered ||
-              _isActivatingShield,
-          onTap: () => _useShield(room),
-        ),
-        const SizedBox(width: 12),
-        _PowerupButton(
-          label: hasUsedFreeze ? 'USED' : 'FREEZE (1)',
-          icon: Icons.ac_unit_rounded,
-          isUsed: hasUsedFreeze,
-          isDisabled: _hasAnswered || _isActivatingFreeze,
-          onTap: () => _useFreeze(room),
-        ),
-      ],
-    );
-  }
 
   Widget _buildDisconnectBanner() {
     return Positioned(
@@ -766,7 +795,10 @@ class _GameScreenState extends ConsumerState<GameScreen>
         );
 
     if (!mounted) return;
-    setState(() => _isActivatingShield = false);
+    setState(() {
+      _isActivatingShield = false;
+      _showPowerupMenu = false;
+    });
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(

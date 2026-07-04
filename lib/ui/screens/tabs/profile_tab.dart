@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../../core/constants/colors.dart';
 import '../../../core/constants/text_styles.dart';
 import '../../../core/utils/rank_system.dart';
@@ -12,7 +13,6 @@ import '../../widgets/xp_progress_bar.dart';
 import '../../widgets/rank_progress_bar.dart';
 import '../../widgets/neon_swirl_background.dart';
 import '../../widgets/smart_avatar.dart';
-import '../character_select_screen.dart';
 import 'edit_profile_screen.dart';
 import 'leaderboard_tab.dart'; 
 
@@ -43,6 +43,34 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with SingleTickerProvid
     super.dispose();
   }
 
+  void _showDeleteConfirmation(BuildContext context, String uid) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.cardBg,
+        title: Text('DELETE ACCOUNT?', style: AppTextStyles.headline.copyWith(color: AppColors.red)),
+        content: const Text('This action is permanent. All your data will be lost.', style: TextStyle(color: AppColors.textSecondary)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: Text('CANCEL', style: AppTextStyles.label)),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await ref.read(userRepositoryProvider).deleteUserProfile(uid);
+              await ref.read(authRepositoryProvider).deleteAccount();
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.red),
+            child: const Text('DELETE', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _reportIssue() {
+    // ignore: deprecated_member_use
+    Share.share('Hi support, I found an issue in QuestArena: ', subject: 'QuestArena Bug Report');
+  }
+
   @override
   Widget build(BuildContext context) {
     final userAsync = ref.watch(currentUserProvider);
@@ -58,7 +86,7 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with SingleTickerProvid
         return Scaffold(
           backgroundColor: Colors.transparent,
           appBar: AppBar(
-            title: Text('PLAYER PROFILE', style: AppTextStyles.display.copyWith(fontSize: 18)),
+            title: Text('PLAYER PROFILE', style: AppTextStyles.display.copyWith(fontSize: 18, letterSpacing: 2)),
             backgroundColor: Colors.transparent,
             elevation: 0,
             centerTitle: true,
@@ -79,37 +107,85 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with SingleTickerProvid
                   padding: const EdgeInsets.all(24),
                   child: Column(
                     children: [
-                      _ProfileHeader(user: user),
+                      SmartAvatar(avatarUrl: user.avatarUrl, size: 110, showGlow: true, showBorder: true),
                       const SizedBox(height: 16),
-                      Text(user.username, style: AppTextStyles.headline),
+                      Text(user.username, style: AppTextStyles.headline.copyWith(fontSize: 24)),
                       Text(
                         RankSystem.getRankName(user.rank, user.subRank),
-                        style: AppTextStyles.label.copyWith(color: AppColors.gold, fontWeight: FontWeight.bold),
+                        style: AppTextStyles.label.copyWith(color: AppColors.gold, fontWeight: FontWeight.bold, letterSpacing: 1),
                       ),
-                      const SizedBox(height: 16),
-                      ElevatedButton.icon(
-                        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const EditProfileScreen())),
-                        icon: const Icon(Icons.edit, size: 16, color: Colors.white),
-                        label: const Text('Edit Details', style: TextStyle(color: Colors.white)),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.purple.withValues(alpha: 0.5),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      const SizedBox(height: 24),
+
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const EditProfileScreen())),
+                          icon: const Icon(Icons.edit_rounded, size: 18, color: Colors.white),
+                          label: const Text('EDIT PROFILE', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.purple.withValues(alpha: 0.6),
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: AppColors.neonViolet.withValues(alpha: 0.3))),
+                          ),
                         ),
                       ),
-                      if (isMvp) _MvpBadge(),
+
+                      if (isMvp) _buildMvpBadge(),
                       const SizedBox(height: 40),
-                      _StatsRow(user: user),
+
+                      _buildStatsOverview(user),
+
                       const SizedBox(height: 32),
-                      _ProgressSection(user: user),
+
+                      _buildProgressSection(user),
+                      
                       const SizedBox(height: 32),
+
                       const _FriendRequestsSection(),
                       const _FriendsListSection(),
+
                       const SizedBox(height: 32),
-                      _DetailedStatsCard(user: user),
+
+                      _buildDetailedStats(user),
+
                       const SizedBox(height: 48),
-                      _AchievementsSection(user: user),
+
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: AppColors.cardBg.withValues(alpha: 0.5),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: AppColors.surface),
+                        ),
+                        child: Column(
+                          children: [
+                            const Text('NEED HELP?', style: TextStyle(color: AppColors.textMuted, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 2)),
+                            const SizedBox(height: 16),
+                            _SupportButton(
+                              icon: Icons.bug_report_rounded,
+                              label: 'REPORT AN ISSUE',
+                              color: AppColors.neonPink,
+                              onTap: _reportIssue,
+                            ),
+                            const Divider(color: AppColors.surface, height: 24),
+                            Text(
+                              'Email: imaginati.appdev@gmail.com',
+                              style: AppTextStyles.label.copyWith(fontSize: 9, color: AppColors.textMuted),
+                            ),
+                          ],
+                        ),
+                      ),
+
                       const SizedBox(height: 48),
-                      _DeleteAccountButton(uid: user.uid),
+
+                      TextButton.icon(
+                        onPressed: () => _showDeleteConfirmation(context, user.uid),
+                        icon: const Icon(Icons.delete_forever_rounded, color: AppColors.red, size: 20),
+                        label: Text(
+                          'DELETE ACCOUNT',
+                          style: AppTextStyles.label.copyWith(color: AppColors.red, fontWeight: FontWeight.bold),
+                        ),
+                      ),
                       const SizedBox(height: 24),
                     ],
                   ),
@@ -121,75 +197,32 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with SingleTickerProvid
       },
     );
   }
-}
 
-class _ProfileHeader extends ConsumerWidget {
-  final UserModel user;
-  const _ProfileHeader({required this.user});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return Stack(
-      alignment: Alignment.bottomRight,
+  Widget _buildMvpBadge() {
+    return Column(
       children: [
-        SmartAvatar(avatarUrl: user.avatarUrl, size: 100, showGlow: true, showBorder: true),
-        Positioned(
-          right: 0,
-          bottom: 0,
-          child: GestureDetector(
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => CharacterSelectScreen(
-                  username: user.username,
-                  onConfirm: (selected) async {
-                    await ref.read(userRepositoryProvider).updateAvatarUrl(user.uid, selected.id);
-                    if (context.mounted) Navigator.pop(context);
-                  },
-                ),
-              ),
-            ),
-            child: Container(
-              padding: const EdgeInsets.all(6),
-              decoration: const BoxDecoration(color: AppColors.neonViolet, shape: BoxShape.circle),
-              child: const Icon(Icons.edit_rounded, size: 14, color: Colors.white),
-            ),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          decoration: BoxDecoration(
+            color: AppColors.gold.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.gold.withValues(alpha: 0.3)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.workspace_premium_rounded, color: AppColors.gold, size: 14),
+              const SizedBox(width: 6),
+              Text('🏆 MVP HOLDER', style: AppTextStyles.label.copyWith(color: AppColors.gold, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+            ],
           ),
         ),
       ],
     );
   }
-}
 
-class _MvpBadge extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(top: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      decoration: BoxDecoration(
-        color: AppColors.gold.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.gold.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.workspace_premium_rounded, color: AppColors.gold, size: 14),
-          const SizedBox(width: 6),
-          Text('🏆 MVP HOLDER', style: AppTextStyles.label.copyWith(color: AppColors.gold, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
-        ],
-      ),
-    );
-  }
-}
-
-class _StatsRow extends StatelessWidget {
-  final UserModel user;
-  const _StatsRow({required this.user});
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildStatsOverview(UserModel user) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -200,14 +233,8 @@ class _StatsRow extends StatelessWidget {
       ],
     );
   }
-}
 
-class _ProgressSection extends StatelessWidget {
-  final UserModel user;
-  const _ProgressSection({required this.user});
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildProgressSection(UserModel user) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -226,16 +253,10 @@ class _ProgressSection extends StatelessWidget {
       ),
     );
   }
-}
 
-class _DetailedStatsCard extends StatelessWidget {
-  final UserModel user;
-  const _DetailedStatsCard({required this.user});
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildDetailedStats(UserModel user) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: AppColors.cardBg,
         borderRadius: BorderRadius.circular(24),
@@ -251,7 +272,7 @@ class _DetailedStatsCard extends StatelessWidget {
               _ProfileStatItem(label: 'LEVEL', value: '${user.level}'),
             ],
           ),
-          const Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Divider(color: AppColors.surface, height: 1)),
+          const Padding(padding: EdgeInsets.symmetric(vertical: 20), child: Divider(color: AppColors.surface, height: 1)),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
@@ -262,87 +283,6 @@ class _DetailedStatsCard extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _AchievementsSection extends StatelessWidget {
-  final UserModel user;
-  const _AchievementsSection({required this.user});
-
-  void _showAll(BuildContext context, List<String> unlockedIds) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.primaryBg,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(32))),
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.7,
-        expand: false,
-        builder: (context, scrollController) => Column(
-          children: [
-            const SizedBox(height: 24),
-            Text('ALL ACHIEVEMENTS', style: AppTextStyles.headline.copyWith(fontSize: 20)),
-            const SizedBox(height: 24),
-            // Minimal grid for brevity in this fix attempt
-            Expanded(child: Center(child: Text('Coming Soon', style: AppTextStyles.label))),
-          ],
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text('ACHIEVEMENTS', style: AppTextStyles.label.copyWith(fontSize: 10, letterSpacing: 1, color: AppColors.textMuted)),
-            TextButton(onPressed: () => _showAll(context, user.achievements), child: Text('VIEW ALL', style: AppTextStyles.label.copyWith(color: AppColors.gold, fontSize: 10))),
-          ],
-        ),
-        const SizedBox(height: 8),
-        if (user.achievements.isEmpty)
-          Padding(padding: const EdgeInsets.symmetric(vertical: 20), child: Text('No achievements unlocked yet', style: AppTextStyles.bodyMd.copyWith(color: AppColors.textMuted)))
-        else
-          _AchievementWrap(unlockedIds: user.achievements),
-      ],
-    );
-  }
-}
-
-class _DeleteAccountButton extends ConsumerWidget {
-  final String uid;
-  const _DeleteAccountButton({required this.uid});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return TextButton.icon(
-      onPressed: () {
-        showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            backgroundColor: AppColors.cardBg,
-            title: Text('DELETE ACCOUNT?', style: AppTextStyles.headline.copyWith(color: AppColors.red)),
-            content: const Text('This action is permanent. All your data will be lost.', style: TextStyle(color: AppColors.textSecondary)),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('CANCEL')),
-              TextButton(
-                onPressed: () async {
-                  Navigator.pop(ctx);
-                  await ref.read(userRepositoryProvider).deleteUserProfile(uid);
-                  await ref.read(authRepositoryProvider).deleteAccount();
-                },
-                child: const Text('DELETE', style: TextStyle(color: AppColors.red)),
-              ),
-            ],
-          ),
-        );
-      },
-      icon: const Icon(Icons.delete_forever_rounded, color: AppColors.red, size: 20),
-      label: Text('DELETE ACCOUNT', style: AppTextStyles.label.copyWith(color: AppColors.red, fontWeight: FontWeight.bold)),
     );
   }
 }
@@ -378,62 +318,34 @@ class _ProfileStatItem extends StatelessWidget {
       children: [
         Text(value, style: AppTextStyles.headline.copyWith(fontSize: 20)),
         const SizedBox(height: 4),
-        Text(label, style: AppTextStyles.label.copyWith(fontSize: 9, color: AppColors.textSecondary)),
+        Text(label, style: AppTextStyles.label.copyWith(fontSize: 9, color: AppColors.textSecondary, fontWeight: FontWeight.bold)),
       ],
     );
   }
 }
 
-class _AchievementChip extends StatelessWidget {
+class _SupportButton extends StatelessWidget {
   final IconData icon;
-  final String name;
-  const _AchievementChip({required this.icon, required this.name});
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+  const _SupportButton({required this.icon, required this.label, required this.color, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppColors.gold.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.gold.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: AppColors.gold, size: 14),
-          const SizedBox(width: 8),
-          Text(name.toUpperCase(), style: AppTextStyles.label.copyWith(color: AppColors.gold, fontSize: 9, fontWeight: FontWeight.bold)),
-        ],
-      ),
-    );
-  }
-}
-
-class _AchievementWrap extends StatelessWidget {
-  final List<String> unlockedIds;
-  const _AchievementWrap({required this.unlockedIds});
-
-  @override
-  Widget build(BuildContext context) {
-    final all = [
-      {'id': 'first_win', 'name': 'First Blood', 'icon': Icons.flash_on_rounded},
-      {'id': 'on_fire', 'name': 'On Fire', 'icon': Icons.whatshot},
-      {'id': 'veteran', 'name': 'Veteran', 'icon': Icons.military_tech},
-      {'id': 'scholar', 'name': 'Scholar', 'icon': Icons.school},
-      {'id': 'arena_breaker', 'name': 'Arena Breaker', 'icon': Icons.security},
-    ];
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(16)),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: all.where((a) => unlockedIds.contains(a['id'])).map((achievement) {
-          return _AchievementChip(icon: achievement['icon'] as IconData, name: achievement['name'] as String);
-        }).toList(),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: color, size: 18),
+            const SizedBox(width: 12),
+            Text(label, style: AppTextStyles.label.copyWith(color: color, fontWeight: FontWeight.bold)),
+          ],
+        ),
       ),
     );
   }
@@ -441,7 +353,6 @@ class _AchievementWrap extends StatelessWidget {
 
 class _FriendRequestsSection extends ConsumerWidget {
   const _FriendRequestsSection();
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final requestsAsync = ref.watch(incomingRequestsProvider);
@@ -453,7 +364,7 @@ class _FriendRequestsSection extends ConsumerWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('FRIEND REQUESTS', style: AppTextStyles.label.copyWith(letterSpacing: 2)),
+            const Text('FRIEND REQUESTS', style: TextStyle(color: AppColors.textMuted, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 2)),
             const SizedBox(height: 16),
             ListView.builder(
               shrinkWrap: true,
@@ -510,7 +421,6 @@ class _FriendRequestsSection extends ConsumerWidget {
 
 class _FriendsListSection extends ConsumerWidget {
   const _FriendsListSection();
-
   void _showFriendProfile(BuildContext context, WidgetRef ref, LeaderboardModel friend) {
     showDialog(
       context: context,
@@ -532,10 +442,8 @@ class _FriendsListSection extends ConsumerWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(friend.username, style: AppTextStyles.headline.copyWith(fontSize: 20)),
-                          Text(
-                            'LVL ${friend.level} • ${RankSystem.getRankName(friend.rank, friend.subRank)}',
-                            style: AppTextStyles.label.copyWith(fontSize: 10, color: AppColors.textSecondary),
-                          ),
+                          Text('LVL ${friend.level} • ${RankSystem.getRankName(friend.rank, friend.subRank)}',
+                            style: AppTextStyles.label.copyWith(fontSize: 10, color: AppColors.textSecondary)),
                         ],
                       ),
                     ),
@@ -562,7 +470,7 @@ class _FriendsListSection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('FRIENDS', style: AppTextStyles.label.copyWith(letterSpacing: 2)),
+        const Text('FRIENDS', style: TextStyle(color: AppColors.textMuted, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 2)),
         const SizedBox(height: 16),
         friendsAsync.when(
           loading: () => const SizedBox(height: 100, child: Center(child: CircularProgressIndicator())),
@@ -597,7 +505,8 @@ class _FriendsListSection extends ConsumerWidget {
                         children: [
                           SmartAvatar(avatarUrl: friend.avatarUrl, size: 40),
                           const SizedBox(height: 8),
-                          Text(friend.username, style: AppTextStyles.bodyMd.copyWith(fontSize: 12, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+                          Text(friend.username, style: AppTextStyles.bodyMd.copyWith(fontSize: 12, fontWeight: FontWeight.bold),
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
                           Text('LVL ${friend.level}', style: AppTextStyles.label.copyWith(fontSize: 9, color: AppColors.gold)),
                         ],
                       ),
