@@ -54,11 +54,6 @@ class _DashboardTabState extends ConsumerState<DashboardTab> with TickerProvider
           return const Center(child: Text('User not found', style: TextStyle(color: AppColors.textSecondary)));
         }
 
-        final totalMatches = user.wins + user.losses;
-        final winRate = totalMatches == 0
-            ? 0
-            : ((user.wins / totalMatches) * 100).round();
-
         return Scaffold(
           backgroundColor: Colors.transparent,
           floatingActionButton: FloatingActionButton.extended(
