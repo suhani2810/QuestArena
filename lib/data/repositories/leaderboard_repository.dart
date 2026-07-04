@@ -17,14 +17,14 @@ class LeaderboardRepository {
     try {
       final snapshot = await _db
           .collection('users')
-          .orderBy('level', descending: true)
-          .orderBy('xp', descending: true)
+          .orderBy('eloRating', descending: true)
           .limit(100)
           .get();
 
       final players = snapshot.docs
           .map((doc) => LeaderboardModel.fromJson(doc.data()))
           .toList();
+      players.sort(_compareByRankStrength);
 
       return Success(players);
     } catch (e) {
@@ -35,14 +35,28 @@ class LeaderboardRepository {
   Stream<List<LeaderboardModel>> watchTopPlayers() {
     return _db
         .collection('users')
-        .orderBy('level', descending: true)
-        .orderBy('xp', descending: true)
+        .orderBy('eloRating', descending: true)
         .limit(100)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs
+      final players = snapshot.docs
           .map((doc) => LeaderboardModel.fromJson(doc.data()))
           .toList();
+      players.sort(_compareByRankStrength);
+      return players;
     });
+  }
+
+  int _compareByRankStrength(LeaderboardModel a, LeaderboardModel b) {
+    final eloCompare = b.eloRating.compareTo(a.eloRating);
+    if (eloCompare != 0) return eloCompare;
+
+    final pointsCompare = b.rankPoints.compareTo(a.rankPoints);
+    if (pointsCompare != 0) return pointsCompare;
+
+    final winsCompare = b.wins.compareTo(a.wins);
+    if (winsCompare != 0) return winsCompare;
+
+    return b.xp.compareTo(a.xp);
   }
 }

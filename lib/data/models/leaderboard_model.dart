@@ -10,6 +10,7 @@ class LeaderboardModel {
   final int xp;
   final String rank;
   final int? subRank;
+  final int rankPoints;
   final int wins;
   final int losses;
   final int draws;
@@ -25,6 +26,7 @@ class LeaderboardModel {
     required this.xp,
     required this.rank,
     this.subRank,
+    this.rankPoints = 0,
     this.wins = 0,
     this.losses = 0,
     this.draws = 0,
@@ -42,7 +44,8 @@ class LeaderboardModel {
   }
 
   // MVP Score for ranking logic
-  double get mvpScore => (xp / 10) + (wins * 10) + (averageAccuracy * 2) + (currentWinStreak * 5);
+  double get mvpScore =>
+      (xp / 10) + (wins * 10) + (averageAccuracy * 2) + (currentWinStreak * 5);
 
   factory LeaderboardModel.fromJson(Map<String, dynamic> json) {
     return LeaderboardModel(
@@ -53,6 +56,7 @@ class LeaderboardModel {
       xp: json['xp'] ?? 0,
       rank: json['rank'] ?? 'Unranked',
       subRank: json['subRank'],
+      rankPoints: json['rankPoints'] ?? 0,
       wins: json['wins'] ?? json['totalWins'] ?? 0,
       losses: json['losses'] ?? json['totalLosses'] ?? 0,
       draws: json['draws'] ?? json['totalDraws'] ?? 0,
@@ -63,18 +67,19 @@ class LeaderboardModel {
   }
 
   Map<String, dynamic> toJson() => {
-    'uid': uid,
-    'username': username,
-    'avatarUrl': avatarUrl,
-    'level': level,
-    'xp': xp,
-    'rank': rank,
-    'subRank': subRank,
-    'wins': wins,
-    'losses': losses,
-    'draws': draws,
-    'currentWinStreak': currentWinStreak,
-    'averageAccuracy': averageAccuracy,
-    'eloRating': eloRating,
-  };
+        'uid': uid,
+        'username': username,
+        'avatarUrl': avatarUrl,
+        'level': level,
+        'xp': xp,
+        'rank': rank,
+        'subRank': subRank,
+        'rankPoints': rankPoints,
+        'wins': wins,
+        'losses': losses,
+        'draws': draws,
+        'currentWinStreak': currentWinStreak,
+        'averageAccuracy': averageAccuracy,
+        'eloRating': eloRating,
+      };
 }
