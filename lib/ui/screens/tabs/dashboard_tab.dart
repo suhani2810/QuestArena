@@ -5,14 +5,14 @@ import '../../../core/constants/colors.dart';
 import '../../../core/constants/text_styles.dart';
 import '../../../providers/user_providers.dart';
 import '../store_screen.dart';
+import '../match_history_screen.dart';
 import '../../../core/utils/rank_system.dart';
 import '../../widgets/rank_badge.dart';
 import '../../widgets/rank_progress_bar.dart';
 import '../../widgets/xp_progress_bar.dart';
 import '../../widgets/smart_avatar.dart';
 import '../../widgets/neon_swirl_background.dart';
-import '../../widgets/daily_quest_box.dart';
-import '../../../providers/daily_quest_provider.dart';
+import '../../widgets/daily_quests_sheet.dart';
 
 class DashboardTab extends ConsumerStatefulWidget {
   const DashboardTab({super.key});
@@ -61,6 +61,12 @@ class _DashboardTabState extends ConsumerState<DashboardTab> with TickerProvider
 
         return Scaffold(
           backgroundColor: Colors.transparent,
+          floatingActionButton: FloatingActionButton.extended(
+            onPressed: () => DailyQuestsSheet.show(context),
+            backgroundColor: AppColors.gold,
+            icon: const Icon(Icons.bolt_rounded, color: Colors.black),
+            label: const Text('QUESTS', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, letterSpacing: 1)),
+          ).animate().slideX(begin: 1, end: 0, delay: 1000.ms, curve: Curves.easeOutBack),
           body: NeonSwirlBackground(
             colors: const [AppColors.neonCyan, AppColors.purple],
             child: FadeTransition(
@@ -76,15 +82,26 @@ class _DashboardTabState extends ConsumerState<DashboardTab> with TickerProvider
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            'DASHBOARD',
-                            style: AppTextStyles.headline.copyWith(fontSize: 18),
+                            'HUB',
+                            style: AppTextStyles.headline.copyWith(fontSize: 18, letterSpacing: 3),
                           ),
-                          IconButton(
-                            onPressed: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => const StoreScreen()),
-                            ),
-                            icon: const Icon(Icons.shopping_bag_rounded, color: AppColors.gold),
+                          Row(
+                            children: [
+                              IconButton(
+                                onPressed: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (_) => const MatchHistoryScreen()),
+                                ),
+                                icon: const Icon(Icons.history_rounded, color: Colors.white70),
+                              ),
+                              IconButton(
+                                onPressed: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (_) => const StoreScreen()),
+                                ),
+                                icon: const Icon(Icons.shopping_bag_rounded, color: AppColors.gold),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -158,11 +175,9 @@ class _DashboardTabState extends ConsumerState<DashboardTab> with TickerProvider
                         ),
                       ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.1, end: 0),
 
-                      const _DailyQuestsSection(),
-
                       const SizedBox(height: 32),
 
-                      Text('QUICK STATS', style: AppTextStyles.label),
+                      Text('QUICK STATS', style: AppTextStyles.label.copyWith(letterSpacing: 2)),
                       const SizedBox(height: 12),
                       
                       Row(
@@ -183,7 +198,7 @@ class _DashboardTabState extends ConsumerState<DashboardTab> with TickerProvider
                           const SizedBox(width: 8),
                           _StatCard(
                             label: 'WIN %',
-                            value: '$winRate%',
+                            value: '${user.winRate.toStringAsFixed(0)}%',
                             color: AppColors.gold,
                             icon: Icons.auto_graph_rounded,
                           ),
@@ -198,58 +213,6 @@ class _DashboardTabState extends ConsumerState<DashboardTab> with TickerProvider
         );
       },
     );
-  }
-}
-
-class _DailyQuestsSection extends ConsumerWidget {
-  const _DailyQuestsSection();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final dailyQuestsAsync = ref.watch(dailyQuestsProvider);
-    final isSunday = DateTime.now().weekday == DateTime.sunday;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 32),
-        Text(
-          isSunday ? 'WEEKLY REWARDS' : 'DAILY QUESTS',
-          style: AppTextStyles.label.copyWith(
-            letterSpacing: 2,
-            color: isSunday ? AppColors.gold : AppColors.textSecondary,
-            fontWeight: isSunday ? FontWeight.w900 : FontWeight.normal,
-          ),
-        ),
-        const SizedBox(height: 12),
-        dailyQuestsAsync.when(
-          loading: () => const Center(
-            child: Padding(
-              padding: EdgeInsets.all(24.0),
-              child: CircularProgressIndicator(color: AppColors.purple),
-            ),
-          ),
-          error: (e, s) => Center(
-            child: Text('Error loading quests', style: AppTextStyles.label.copyWith(color: AppColors.red)),
-          ),
-          data: (quests) {
-            if (quests.isEmpty) {
-              return const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(24.0),
-                  child: Text('No quests available today.', style: TextStyle(color: AppColors.textMuted)),
-                ),
-              );
-            }
-            return Column(
-              children: quests.asMap().entries.map((entry) {
-                return DailyQuestBox(quest: entry.value, index: entry.key);
-              }).toList(),
-            );
-          },
-        ),
-      ],
-    ).animate().fadeIn(delay: 300.ms);
   }
 }
 
