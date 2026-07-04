@@ -220,6 +220,50 @@ class GameRepository {
     });
   }
 
+  Future<void> activateFreeze({
+    required String roomId,
+    required String freezerUid,
+    required String targetUid,
+    required int questionIndex,
+  }) async {
+    final roomRef = _db.collection('gameRooms').doc(roomId);
+
+    await _db.runTransaction((transaction) async {
+      final snapshot = await transaction.get(roomRef);
+      if (!snapshot.exists) return;
+
+      final data = snapshot.data() as Map<String, dynamic>;
+      if (data['status'] != 'active' && data['status'] != 'arena_breaker') return;
+      
+      final powerups = Map<String, dynamic>.from(data['powerups'] ?? {});
+      
+      // 1. Check if freezer has already used their freeze this match
+      final usedFreeze = Map<String, dynamic>.from(powerups['usedFreeze'] ?? {});
+      if (usedFreeze[freezerUid] == true) return;
+
+      // 2. Check if a freeze is already active
+      final activeFreeze = powerups['activeFreeze'];
+      if (activeFreeze != null) {
+        final startTime = (activeFreeze['startTime'] as Timestamp).toDate();
+        if (DateTime.now().difference(startTime).inSeconds < 3) {
+          return; // Already frozen
+        }
+      }
+
+      // 3. Activate freeze
+      transaction.update(roomRef, {
+        'powerups.activeFreeze': {
+          'freezerUid': freezerUid,
+          'targetUid': targetUid,
+          'questionIndex': questionIndex,
+          'startTime': FieldValue.serverTimestamp(),
+          'durationMs': 3000,
+        },
+        'powerups.usedFreeze.$freezerUid': true,
+      });
+    });
+  }
+
   // Force advance if timer expired (Independent driver)
   Future<void> forceAdvanceQuestion(String roomId, int fromIndex) async {
     final roomRef = _db.collection('gameRooms').doc(roomId);
