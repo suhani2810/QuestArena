@@ -52,7 +52,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   NavigationDestination _buildNavItem(int selectedIndex, int index, IconData activeIcon, IconData icon, String label) {
-    final isSelected = selectedIndex == index;
     return NavigationDestination(
       icon: Icon(icon, color: AppColors.textMuted),
       selectedIcon: Icon(activeIcon, color: AppColors.neonCyan),

@@ -4,6 +4,7 @@
 
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../core/constants/colors.dart';
@@ -1077,87 +1078,6 @@ class _PowerupButton extends StatelessWidget {
   }
 }
 
-class _BattleMomentumChip extends StatefulWidget {
-  final String text;
-  const _BattleMomentumChip({required this.text});
-
-  @override
-  State<_BattleMomentumChip> createState() => _BattleMomentumChipState();
-}
-
-class _BattleMomentumChipState extends State<_BattleMomentumChip> {
-  bool _show = false;
-  Timer? _hideTimer;
-  String? _currentText;
-
-  @override
-  void initState() {
-    super.initState();
-    _currentText = widget.text;
-  }
-
-  @override
-  void didUpdateWidget(_BattleMomentumChip oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.text != oldWidget.text) {
-      _triggerShow();
-    }
-  }
-
-  void _triggerShow() {
-    setState(() {
-      _currentText = widget.text;
-      _show = true;
-    });
-    _hideTimer?.cancel();
-    _hideTimer = Timer(const Duration(milliseconds: 2000), () {
-      if (mounted) setState(() => _show = false);
-    });
-  }
-
-  @override
-  void dispose() {
-    _hideTimer?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!_show || _currentText == null) return const SizedBox.shrink();
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-      decoration: BoxDecoration(
-        color: AppColors.bgDeep.withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: AppColors.neonCyan.withValues(alpha: 0.4),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.neonCyan.withValues(alpha: 0.15),
-            blurRadius: 8,
-            spreadRadius: 1,
-          ),
-        ],
-      ),
-      child: Text(
-        _currentText!,
-        style: AppTextStyles.label.copyWith(
-          color: Colors.white,
-          fontSize: 9,
-          fontWeight: FontWeight.w900,
-          letterSpacing: 1,
-        ),
-      ),
-    ).animate().slideY(begin: -0.5, end: 0, duration: 400.ms, curve: Curves.easeOut)
-     .fadeIn(duration: 400.ms)
-     .then(delay: 1400.ms)
-     .fadeOut(duration: 400.ms);
-  }
-}
-
 class _ABCountdown extends StatefulWidget {
   final VoidCallback onFinished;
   const _ABCountdown({required this.onFinished});
@@ -1226,86 +1146,5 @@ class _AnswerButton extends StatelessWidget {
         child: Text(text, style: AppTextStyles.bodyMd.copyWith(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal), textAlign: TextAlign.center),
       ),
     );
-  }
-}
-
-class _BattleMomentumChip extends StatefulWidget {
-  final String text;
-  const _BattleMomentumChip({required this.text});
-
-  @override
-  State<_BattleMomentumChip> createState() => _BattleMomentumChipState();
-}
-
-class _BattleMomentumChipState extends State<_BattleMomentumChip> {
-  bool _show = false;
-  Timer? _hideTimer;
-  String? _currentText;
-
-  @override
-  void initState() {
-    super.initState();
-    _currentText = widget.text;
-  }
-
-  @override
-  void didUpdateWidget(_BattleMomentumChip oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.text != oldWidget.text) {
-      _triggerShow();
-    }
-  }
-
-  void _triggerShow() {
-    setState(() {
-      _currentText = widget.text;
-      _show = true;
-    });
-    _hideTimer?.cancel();
-    _hideTimer = Timer(const Duration(milliseconds: 2000), () {
-      if (mounted) setState(() => _show = false);
-    });
-  }
-
-  @override
-  void dispose() {
-    _hideTimer?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!_show || _currentText == null) return const SizedBox.shrink();
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-      decoration: BoxDecoration(
-        color: AppColors.bgDeep.withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: AppColors.neonCyan.withValues(alpha: 0.4),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.neonCyan.withValues(alpha: 0.15),
-            blurRadius: 8,
-            spreadRadius: 1,
-          ),
-        ],
-      ),
-      child: Text(
-        _currentText!,
-        style: AppTextStyles.label.copyWith(
-          color: Colors.white,
-          fontSize: 9,
-          fontWeight: FontWeight.w900,
-          letterSpacing: 1,
-        ),
-      ),
-    ).animate().slideY(begin: -0.5, end: 0, duration: 400.ms, curve: Curves.easeOut)
-     .fadeIn(duration: 400.ms)
-     .then(delay: 1400.ms)
-     .fadeOut(duration: 400.ms);
   }
 }

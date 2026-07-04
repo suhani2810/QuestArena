@@ -540,12 +540,12 @@ class _ActionButton extends ConsumerWidget {
     
     final incomingRequests = ref.watch(incomingRequestsProvider).value ?? [];
     final receivedRequest = incomingRequests.where(
-      (r) => (r.data() as Map<String, dynamic>)['senderUid'] == uid
+      (r) => r.data()['senderUid'] == uid
     ).firstOrNull;
     
     final outgoingRequests = ref.watch(outgoingRequestsProvider).value ?? [];
     final sentRequest = outgoingRequests.any(
-      (r) => (r.data() as Map<String, dynamic>)['receiverUid'] == uid
+      (r) => r.data()['receiverUid'] == uid
     );
 
     String label = '+ Add Friend';

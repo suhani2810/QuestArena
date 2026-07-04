@@ -13,8 +13,6 @@ import 'package:questarena/data/models/user_model.dart';
 import 'package:questarena/data/models/match_history_model.dart';
 import 'package:questarena/data/models/leaderboard_model.dart';
 import 'package:questarena/core/errors/result.dart';
-import '../data/models/user_model.dart';
-import '../data/models/match_history_model.dart';
 
 final dioProvider = Provider((ref) => Dio(BaseOptions(
   connectTimeout: const Duration(seconds: 5),
