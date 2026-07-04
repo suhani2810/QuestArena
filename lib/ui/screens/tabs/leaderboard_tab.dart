@@ -209,7 +209,7 @@ class _MvpCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '${player.totalWins} WINS THIS WEEK',
+                  '${player.wins} WINS THIS WEEK',
                   style: AppTextStyles.label.copyWith(
                     color: AppColors.teal,
                     fontWeight: FontWeight.bold,

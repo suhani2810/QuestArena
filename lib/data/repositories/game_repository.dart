@@ -234,6 +234,52 @@ class GameRepository {
     });
   }
 
+  Future<void> activateFreeze({
+    required String roomId,
+    required String freezerUid,
+    required String targetUid,
+    required int questionIndex,
+  }) async {
+    final roomRef = _db.collection('gameRooms').doc(roomId);
+
+    await _db.runTransaction((transaction) async {
+      final snapshot = await transaction.get(roomRef);
+      if (!snapshot.exists) return;
+
+      final data = snapshot.data() as Map<String, dynamic>;
+      if (data['status'] != 'active' && data['status'] != 'arena_breaker')
+        return;
+
+      final powerups = Map<String, dynamic>.from(data['powerups'] ?? {});
+
+      // 1. Check if freezer has already used their freeze this match
+      final usedFreeze =
+          Map<String, dynamic>.from(powerups['usedFreeze'] ?? {});
+      if (usedFreeze[freezerUid] == true) return;
+
+      // 2. Check if a freeze is already active
+      final activeFreeze = powerups['activeFreeze'];
+      if (activeFreeze != null) {
+        final startTime = (activeFreeze['startTime'] as Timestamp).toDate();
+        if (DateTime.now().difference(startTime).inSeconds < 3) {
+          return; // Already frozen
+        }
+      }
+
+      // 3. Activate freeze
+      transaction.update(roomRef, {
+        'powerups.activeFreeze': {
+          'freezerUid': freezerUid,
+          'targetUid': targetUid,
+          'questionIndex': questionIndex,
+          'startTime': FieldValue.serverTimestamp(),
+          'durationMs': 3000,
+        },
+        'powerups.usedFreeze.$freezerUid': true,
+      });
+    });
+  }
+
   // Force advance if timer expired (Independent driver)
   Future<void> forceAdvanceQuestion(String roomId, int fromIndex) async {
     final roomRef = _db.collection('gameRooms').doc(roomId);
@@ -476,11 +522,50 @@ class GameRepository {
     return null;
   }
 
-  Future<void> triggerQuestionsFallback(String roomId) async {
+  Future<void> useLifeline({
+    required String userId,
+    required String lifelineType, // 'oneOption' or 'twoOption'
+  }) async {
+    final userRef = _db.collection('users').doc(userId);
+    await _db.runTransaction((transaction) async {
+      final snapshot = await transaction.get(userRef);
+      if (!snapshot.exists) return;
+
+      final field = lifelineType == 'oneOption'
+          ? 'oneOptionLifelines'
+          : 'twoOptionLifelines';
+      final currentCount = snapshot.data()![field] ?? 0;
+
+      if (currentCount > 0) {
+        transaction.update(userRef, {
+          field: FieldValue.increment(-1),
+        });
+      } else {
+        throw Exception('No lifelines remaining');
+      }
+    });
+  }
+
+  Future<void> useRankProtection(String userId) async {
+    final userRef = _db.collection('users').doc(userId);
+    await _db.runTransaction((transaction) async {
+      final snapshot = await transaction.get(userRef);
+      if (!snapshot.exists) return;
+
+      final currentCount = snapshot.data()!['rankProtectionMatches'] ?? 0;
+
+      if (currentCount > 0) {
+        transaction.update(userRef, {
+          'rankProtectionMatches': FieldValue.increment(-1),
+        });
+      }
+    });
+  }
+
+  Future<void> activateRankProtectionForMatch(
+      String roomId, int playerNumber, bool active) async {
     await _db.collection('gameRooms').doc(roomId).update({
-      'questions': GameUtils.getFallbackQuestions(),
-      'status': 'active',
-      'questionStartedAt': FieldValue.serverTimestamp(),
+      'player$playerNumber.rankProtectionActive': active,
     });
   }
 
@@ -491,8 +576,9 @@ class GameRepository {
       if (!snapshot.exists) return;
 
       final data = snapshot.data();
-      final claimedList = List<String>.from(data?['claimedRewards'] ?? []);
+      if (data == null) return;
 
+      final claimedList = List<String>.from(data['claimedRewards'] ?? []);
       if (claimedList.contains(userId)) return; // Already claimed
 
       claimedList.add(userId);

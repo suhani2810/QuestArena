@@ -3,6 +3,7 @@
 // Features: Heartbeat, Robust Reconnect, Independent Match Progression.
 
 import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -14,6 +15,7 @@ import '../../data/models/game_room_model.dart';
 import '../../core/utils/game_utils.dart';
 import '../widgets/smart_avatar.dart';
 import '../widgets/neon_swirl_background.dart';
+import '../widgets/lifeline_button.dart';
 import 'result_screen.dart';
 
 class GameScreen extends ConsumerStatefulWidget {
@@ -30,14 +32,16 @@ class _GameScreenState extends ConsumerState<GameScreen>
   String? _selectedAnswer;
   bool _hasAnswered = false;
   List<String> _shuffledOptions = [];
-  List<String> _fiftyFiftyHiddenOptions = [];
+  List<String> _hiddenOptions = [];
   int _lastQuestionIndex = -1;
   String? _lastABQuestionText;
   int _lastABRound = 0;
-  bool _hasUsedFiftyFifty = false;
   bool _isActivatingShield = false;
+  bool _isActivatingFreeze = false;
   bool _isRevealingTimeoutAnswer = false;
   int? _timeoutRevealQuestionIndex;
+  bool _hasUsedOneOptionLifeline = false;
+  bool _hasUsedTwoOptionLifeline = false;
 
   // Heartbeat & Timer state
   Timer? _heartbeatTimer;
@@ -101,12 +105,42 @@ class _GameScreenState extends ConsumerState<GameScreen>
         (room.status != 'active' && room.status != 'arena_breaker')) return;
 
     if (room.questionStartedAt != null) {
+      final user = ref.read(currentUserProvider).value;
+      final activeFreeze = room.powerups['activeFreeze'];
+
+      int freezeOffset = 0;
+      bool isFrozenNow = false;
+
+      if (activeFreeze != null &&
+          activeFreeze['targetUid'] == user?.uid &&
+          activeFreeze['questionIndex'] == room.currentQuestionIndex) {
+        final startTime = (activeFreeze['startTime'] is Timestamp)
+            ? (activeFreeze['startTime'] as Timestamp).toDate()
+            : DateTime.fromMillisecondsSinceEpoch(
+                activeFreeze['startTime'] as int);
+
+        final now = DateTime.now();
+        final freezeElapsed = now.difference(startTime).inMilliseconds;
+
+        if (freezeElapsed < 3000 && freezeElapsed >= 0) {
+          isFrozenNow = true;
+          freezeOffset = freezeElapsed;
+        } else if (freezeElapsed >= 3000) {
+          freezeOffset = 3000;
+        }
+      }
+
       final now = DateTime.now();
       final elapsedMs = now.difference(room.questionStartedAt!).inMilliseconds;
-      final remainingMs = 15000 - elapsedMs;
+      final adjustedElapsedMs = (elapsedMs - freezeOffset).clamp(0, 15000);
+      final remainingMs = 15000 - adjustedElapsedMs;
+
+      if (isFrozenNow) {
+        if (_timerController.isAnimating) _timerController.stop();
+        return;
+      }
 
       if (remainingMs <= 0) {
-        // Timer EXPIRED - Driver logic
         if (!_hasAnswered && _timerController.isAnimating) {
           _timerController.stop();
           if (room.status == 'arena_breaker') {
@@ -115,19 +149,18 @@ class _GameScreenState extends ConsumerState<GameScreen>
             _handleTimeout();
           }
         }
-        // After the reveal window, force server to move to next Q if it hasn't yet.
         if (room.status == 'active' && !_isRevealingTimeoutAnswer) {
           ref
               .read(gameRepositoryProvider)
               .forceAdvanceQuestion(widget.roomId, room.currentQuestionIndex);
         }
       } else {
-        // Sync local timer animation
         final targetValue = remainingMs / 15000.0;
         if ((_timerController.value - targetValue).abs() > 0.05 ||
             !_timerController.isAnimating) {
           if (!_hasAnswered) {
-            _timerController.duration = Duration(milliseconds: remainingMs);
+            _timerController.duration =
+                Duration(milliseconds: remainingMs.toInt());
             _timerController.reverse(from: targetValue);
           }
         }
@@ -202,7 +235,6 @@ class _GameScreenState extends ConsumerState<GameScreen>
 
     int score = 0;
     if (isCorrect) {
-      // Calculate score based on remaining time
       final remainingRatio = _timerController.value;
       score = 10 + (remainingRatio * 5).toInt();
     }
@@ -271,21 +303,21 @@ class _GameScreenState extends ConsumerState<GameScreen>
         return;
       }
 
-      // Detect New Question (Regular)
       if (_lastQuestionIndex != room.currentQuestionIndex) {
         _lastQuestionIndex = room.currentQuestionIndex;
         _prepareOptions(room);
         setState(() {
           _hasAnswered = false;
           _selectedAnswer = null;
-          _fiftyFiftyHiddenOptions = [];
+          _hiddenOptions = [];
           _isRevealingTimeoutAnswer = false;
           _timeoutRevealQuestionIndex = null;
+          _hasUsedOneOptionLifeline = false;
+          _hasUsedTwoOptionLifeline = false;
         });
-        _syncState(); // Immediate sync for new Q
+        _syncState();
       }
 
-      // Arena Breaker Synchronization
       if (room.status == 'arena_breaker' && room.arenaBreakerQuestion != null) {
         if (_lastABRound != room.arenaBreakerRound) {
           final isFirstABQuestion = _lastABRound == 0;
@@ -294,13 +326,11 @@ class _GameScreenState extends ConsumerState<GameScreen>
           setState(() {
             _hasAnswered = false;
             _selectedAnswer = null;
-            // If we reconnected mid-match, skip the 3s intro if round already started a while ago
             if (isFirstABQuestion && room.questionStartedAt != null) {
               final elapsed =
                   DateTime.now().difference(room.questionStartedAt!).inSeconds;
               if (elapsed > 2) _showABIntro = false;
             } else if (!isFirstABQuestion) {
-              // Not the first round (both got it wrong previously), skip intro
               _showABIntro = false;
             }
           });
@@ -308,7 +338,6 @@ class _GameScreenState extends ConsumerState<GameScreen>
         }
       }
 
-      // Presence Logic
       final String p1Uid = room.player1['uid'] ?? '';
       final String? p2Uid = room.player2?['uid'];
       final String? opponentId = user.uid == p1Uid ? p2Uid : p1Uid;
@@ -316,7 +345,9 @@ class _GameScreenState extends ConsumerState<GameScreen>
       if (opponentId != null &&
           (room.status == 'active' || room.status == 'arena_breaker')) {
         final presence = room.presence[opponentId];
-        final lastSeen = presence?['lastSeen'] as DateTime?;
+        final lastSeen = (presence?['lastSeen'] is int)
+            ? DateTime.fromMillisecondsSinceEpoch(presence?['lastSeen'])
+            : (presence?['lastSeen'] as DateTime?);
         final isOnline = presence?['isOnline'] ?? true;
 
         bool disconnected = !isOnline ||
@@ -368,6 +399,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
                 children: [
                   _buildMainUI(room),
                   if (_isOpponentDisconnected) _buildDisconnectBanner(),
+                  _buildFreezeOverlay(room),
                 ],
               ),
             );
@@ -383,6 +415,8 @@ class _GameScreenState extends ConsumerState<GameScreen>
       return const Center(child: CircularProgressIndicator());
 
     final question = room.questions[room.currentQuestionIndex];
+    final momentumText = _calculateMomentum(room);
+    final isRankedOrPrivate = room.isRanked || room.roomCode.isNotEmpty;
 
     return SafeArea(
       child: Padding(
@@ -391,7 +425,18 @@ class _GameScreenState extends ConsumerState<GameScreen>
           children: [
             const SizedBox(height: 16),
             _buildHeader(room),
-            const SizedBox(height: 24),
+            Stack(
+              alignment: Alignment.center,
+              clipBehavior: Clip.none,
+              children: [
+                const SizedBox(height: 24),
+                if (isRankedOrPrivate)
+                  Positioned(
+                    top: 0,
+                    child: _BattleMomentumChip(text: momentumText),
+                  ),
+              ],
+            ),
             _buildTimerBar(),
             const SizedBox(height: 24),
             Expanded(
@@ -408,7 +453,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
                         .fadeIn(),
                     const SizedBox(height: 32),
                     ..._shuffledOptions
-                        .where((opt) => !_fiftyFiftyHiddenOptions.contains(opt))
+                        .where((opt) => !_hiddenOptions.contains(opt))
                         .map((opt) => Padding(
                               padding: const EdgeInsets.only(bottom: 16),
                               child: _AnswerButton(
@@ -423,20 +468,22 @@ class _GameScreenState extends ConsumerState<GameScreen>
                               ),
                             )),
                     const SizedBox(height: 16),
+                    if (_isRevealingTimeoutAnswer &&
+                        _timeoutRevealQuestionIndex ==
+                            room.currentQuestionIndex)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          'Time up! Correct answer revealed.',
+                          style: AppTextStyles.label
+                              .copyWith(color: AppColors.gold),
+                          textAlign: TextAlign.center,
+                        ).animate().fadeIn().shake(hz: 2),
+                      ),
                   ],
                 ),
               ),
             ),
-            if (_isRevealingTimeoutAnswer &&
-                _timeoutRevealQuestionIndex == room.currentQuestionIndex)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  'Time up! Correct answer revealed.',
-                  style: AppTextStyles.label.copyWith(color: AppColors.gold),
-                  textAlign: TextAlign.center,
-                ).animate().fadeIn().shake(hz: 2),
-              ),
           ],
         ),
       ),
@@ -479,14 +526,45 @@ class _GameScreenState extends ConsumerState<GameScreen>
   }
 
   Widget _buildTimerBar() {
+    final room = ref.read(gameRoomProvider(widget.roomId)).value;
+    final user = ref.read(currentUserProvider).value;
+    final activeFreeze = room?.powerups['activeFreeze'];
+    final bool isFrozen = activeFreeze != null &&
+        activeFreeze['targetUid'] == user?.uid &&
+        activeFreeze['questionIndex'] == room?.currentQuestionIndex &&
+        DateTime.now()
+                .difference(activeFreeze['startTime'] is Timestamp
+                    ? (activeFreeze['startTime'] as Timestamp).toDate()
+                    : DateTime.fromMillisecondsSinceEpoch(
+                        activeFreeze['startTime'] as int))
+                .inMilliseconds <
+            3000;
+
     return RepaintBoundary(
       child: AnimatedBuilder(
         animation: _timerController,
-        builder: (_, __) => LinearProgressIndicator(
-          value: _timerController.value,
-          backgroundColor: AppColors.surface,
-          color: _timerController.value < 0.3 ? AppColors.red : AppColors.gold,
-          minHeight: 10,
+        builder: (_, __) => Container(
+          decoration: isFrozen
+              ? BoxDecoration(
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.neonCyan.withValues(alpha: 0.5),
+                      blurRadius: 10,
+                      spreadRadius: 2,
+                    )
+                  ],
+                )
+              : null,
+          child: LinearProgressIndicator(
+            value: _timerController.value,
+            backgroundColor: AppColors.surface,
+            color: isFrozen
+                ? AppColors.neonCyan
+                : (_timerController.value < 0.3
+                    ? AppColors.red
+                    : AppColors.gold),
+            minHeight: 10,
+          ),
         ),
       ),
     );
@@ -507,15 +585,29 @@ class _GameScreenState extends ConsumerState<GameScreen>
     final shieldUnlocked = _currentCorrectStreak(room) >= 2;
     final opponentAlreadyAnswered = _opponentHasAnsweredCurrentQuestion(room);
 
+    final usedFreeze =
+        Map<String, dynamic>.from(room.powerups['usedFreeze'] ?? {});
+    final hasUsedFreeze = usedFreeze[uid] == true;
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        _PowerupButton(
-          label: '50/50',
-          icon: Icons.filter_2_rounded,
-          isUsed: _hasUsedFiftyFifty,
+        LifelineButton(
+          label: 'Remove 1',
+          icon: Icons.exposure_minus_1,
+          count: user?.oneOptionLifelines ?? 0,
+          isUsed: _hasUsedOneOptionLifeline,
           isDisabled: _hasAnswered,
-          onTap: () => _useFiftyFifty(room),
+          onTap: () => _useLifeline(room, 'oneOption'),
+        ),
+        const SizedBox(width: 12),
+        LifelineButton(
+          label: 'Remove 2',
+          icon: Icons.exposure_minus_2,
+          count: user?.twoOptionLifelines ?? 0,
+          isUsed: _hasUsedTwoOptionLifeline,
+          isDisabled: _hasAnswered,
+          onTap: () => _useLifeline(room, 'twoOption'),
         ),
         const SizedBox(width: 12),
         _PowerupButton(
@@ -527,6 +619,14 @@ class _GameScreenState extends ConsumerState<GameScreen>
               opponentAlreadyAnswered ||
               _isActivatingShield,
           onTap: () => _useShield(room),
+        ),
+        const SizedBox(width: 12),
+        _PowerupButton(
+          label: hasUsedFreeze ? 'USED' : 'FREEZE (1)',
+          icon: Icons.ac_unit_rounded,
+          isUsed: hasUsedFreeze,
+          isDisabled: _hasAnswered || _isActivatingFreeze,
+          onTap: () => _useFreeze(room),
         ),
       ],
     );
@@ -590,6 +690,29 @@ class _GameScreenState extends ConsumerState<GameScreen>
     }
   }
 
+  String _calculateMomentum(GameRoomModel room) {
+    final user = ref.read(currentUserProvider).value;
+    final isP1 = user?.uid == room.player1['uid'];
+    final myData = isP1 ? room.player1 : room.player2;
+    final opData = isP1 ? room.player2 : room.player1;
+
+    final myScore = myData?['score'] ?? 0;
+    final opScore = opData?['score'] ?? 0;
+    final diff = myScore - opScore;
+
+    // We use a threshold of 30 points as a proxy for "3 or more questions"
+    // Since each question gives ~10-15 points.
+    if (room.currentQuestionIndex == 9 && myScore == opScore && myScore > 0) {
+      return "💥 Final Question Decides the Winner!";
+    }
+
+    if (diff >= 30) return "🔥 Dominating the Match";
+    if (diff > 0) return "🟢 You're Leading";
+    if (diff <= -30) return "🔴 Falling Behind";
+    if (diff < 0) return "🟠 Opponent is Leading";
+    return "⚔️ Neck and Neck";
+  }
+
   void _prepareOptions(GameRoomModel room) {
     if (room.currentQuestionIndex >= 0 &&
         room.currentQuestionIndex < room.questions.length) {
@@ -606,17 +729,49 @@ class _GameScreenState extends ConsumerState<GameScreen>
       ..shuffle();
   }
 
-  void _useFiftyFifty(GameRoomModel room) {
-    if (_hasUsedFiftyFifty || _hasAnswered) return;
-    final question = room.questions[room.currentQuestionIndex];
-    final wrong = _shuffledOptions
-        .where((o) => o != question['correct_answer'])
-        .toList()
-      ..shuffle();
-    setState(() {
-      _hasUsedFiftyFifty = true;
-      _fiftyFiftyHiddenOptions = wrong.take(2).toList();
-    });
+  void _useLifeline(GameRoomModel room, String type) async {
+    if (_hasAnswered) return;
+    if (type == 'oneOption' && _hasUsedOneOptionLifeline) return;
+    if (type == 'twoOption' && _hasUsedTwoOptionLifeline) return;
+
+    final user = ref.read(currentUserProvider).value;
+    if (user == null) return;
+
+    final count =
+        type == 'oneOption' ? user.oneOptionLifelines : user.twoOptionLifelines;
+    if (count <= 0) return;
+
+    try {
+      await ref.read(gameRepositoryProvider).useLifeline(
+            userId: user.uid,
+            lifelineType: type,
+          );
+
+      final question = room.questions[room.currentQuestionIndex];
+      final availableWrong = _shuffledOptions
+          .where((o) =>
+              o != question['correct_answer'] && !_hiddenOptions.contains(o))
+          .toList()
+        ..shuffle();
+
+      setState(() {
+        if (type == 'oneOption') {
+          _hasUsedOneOptionLifeline = true;
+          if (availableWrong.isNotEmpty) {
+            _hiddenOptions.add(availableWrong.first);
+          }
+        } else {
+          _hasUsedTwoOptionLifeline = true;
+          _hiddenOptions.addAll(availableWrong.take(2));
+        }
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error using lifeline: $e')),
+        );
+      }
+    }
   }
 
   int _currentCorrectStreak(GameRoomModel room) {
@@ -680,6 +835,75 @@ class _GameScreenState extends ConsumerState<GameScreen>
     );
   }
 
+  void _useFreeze(GameRoomModel room) async {
+    final user = ref.read(currentUserProvider).value;
+    if (user == null || _hasAnswered || _isActivatingFreeze) return;
+
+    final usedFreeze =
+        Map<String, dynamic>.from(room.powerups['usedFreeze'] ?? {});
+    if (usedFreeze[user.uid] == true) return;
+
+    final p1Uid = room.player1['uid'];
+    final p2Uid = room.player2?['uid'];
+    final String? opponentId = user.uid == p1Uid ? p2Uid : p1Uid;
+    if (opponentId == null) return;
+
+    setState(() => _isActivatingFreeze = true);
+    await ref.read(gameRepositoryProvider).activateFreeze(
+          roomId: widget.roomId,
+          freezerUid: user.uid,
+          targetUid: opponentId,
+          questionIndex: room.currentQuestionIndex,
+        );
+
+    if (mounted) setState(() => _isActivatingFreeze = false);
+  }
+
+  Widget _buildFreezeOverlay(GameRoomModel room) {
+    final user = ref.read(currentUserProvider).value;
+    final activeFreeze = room.powerups['activeFreeze'];
+    if (activeFreeze == null ||
+        activeFreeze['targetUid'] != user?.uid ||
+        activeFreeze['questionIndex'] != room.currentQuestionIndex) {
+      return const SizedBox.shrink();
+    }
+
+    final startTime = (activeFreeze['startTime'] is Timestamp)
+        ? (activeFreeze['startTime'] as Timestamp).toDate()
+        : DateTime.fromMillisecondsSinceEpoch(activeFreeze['startTime'] as int);
+    final freezeElapsed = DateTime.now().difference(startTime).inMilliseconds;
+    if (freezeElapsed >= 3000 || freezeElapsed < 0)
+      return const SizedBox.shrink();
+
+    return Container(
+      color: Colors.black45,
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.ac_unit_rounded,
+                    color: AppColors.neonCyan, size: 80)
+                .animate(onPlay: (c) => c.repeat())
+                .shimmer(duration: 1.seconds)
+                .scale(
+                    begin: const Offset(0.8, 0.8), end: const Offset(1.2, 1.2)),
+            const SizedBox(height: 24),
+            Text(
+              '❄ FREEZE ACTIVATED!',
+              style: AppTextStyles.display
+                  .copyWith(color: AppColors.neonCyan, fontSize: 24),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Your timer is frozen',
+              style: AppTextStyles.label.copyWith(color: Colors.white70),
+            ),
+          ],
+        ),
+      ),
+    ).animate().fadeIn();
+  }
+
   Widget _buildArenaBreakerRound(GameRoomModel room) {
     if (_showABIntro) {
       return Center(
@@ -726,7 +950,6 @@ class _GameScreenState extends ConsumerState<GameScreen>
     if (question == null)
       return const Center(child: CircularProgressIndicator());
 
-    // Refresh options if the AB question has changed
     final qTextRaw = question['question']?.toString();
     if (_lastABQuestionText != qTextRaw) {
       _prepareABOptions(question);
@@ -956,5 +1179,88 @@ class _AnswerButton extends StatelessWidget {
             textAlign: TextAlign.center),
       ),
     );
+  }
+}
+
+class _BattleMomentumChip extends StatefulWidget {
+  final String text;
+  const _BattleMomentumChip({required this.text});
+
+  @override
+  State<_BattleMomentumChip> createState() => _BattleMomentumChipState();
+}
+
+class _BattleMomentumChipState extends State<_BattleMomentumChip> {
+  bool _show = false;
+  Timer? _hideTimer;
+  String? _currentText;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentText = widget.text;
+  }
+
+  @override
+  void didUpdateWidget(_BattleMomentumChip oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.text != oldWidget.text) {
+      _triggerShow();
+    }
+  }
+
+  void _triggerShow() {
+    setState(() {
+      _currentText = widget.text;
+      _show = true;
+    });
+    _hideTimer?.cancel();
+    _hideTimer = Timer(const Duration(milliseconds: 2000), () {
+      if (mounted) setState(() => _show = false);
+    });
+  }
+
+  @override
+  void dispose() {
+    _hideTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_show || _currentText == null) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.bgDeep.withValues(alpha: 0.9),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: AppColors.neonCyan.withValues(alpha: 0.4),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.neonCyan.withValues(alpha: 0.15),
+            blurRadius: 8,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Text(
+        _currentText!,
+        style: AppTextStyles.label.copyWith(
+          color: Colors.white,
+          fontSize: 9,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 1,
+        ),
+      ),
+    )
+        .animate()
+        .slideY(begin: -0.5, end: 0, duration: 400.ms, curve: Curves.easeOut)
+        .fadeIn(duration: 400.ms)
+        .then(delay: 1400.ms)
+        .fadeOut(duration: 400.ms);
   }
 }

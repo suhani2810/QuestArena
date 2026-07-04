@@ -8,9 +8,9 @@ import '../../../providers/matchmaking_providers.dart';
 import '../../../data/models/matchmaking_model.dart';
 import '../../widgets/category_picker_sheet.dart';
 import '../../widgets/neon_swirl_background.dart';
+import '../../../features/practice/screens/practice_setup_screen.dart';
 import '../matchmaking_screen.dart';
 import '../private_room_screen.dart';
-import '../practice_screen.dart';
 
 class BattleTab extends ConsumerStatefulWidget {
   const BattleTab({super.key});
@@ -115,7 +115,7 @@ class _BattleTabState extends ConsumerState<BattleTab>
                     Navigator.push(
                         context,
                         MaterialPageRoute(
-                            builder: (_) => const PracticeScreen()));
+                            builder: (_) => const PracticeSetupScreen()));
                   },
                 ),
               ],

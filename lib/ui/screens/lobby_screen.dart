@@ -21,15 +21,30 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
   int _countdown = 3;
   Timer? _timer;
   bool _isStartingGame = false;
-  bool _isMarkingReady = false;
+
+  String _getCategoryIcon(String category) {
+    final lowerCategory = category.toLowerCase();
+    if (lowerCategory.contains('computers')) return '💻';
+    if (lowerCategory.contains('music')) return '🎵';
+    if (lowerCategory.contains('film')) return '🎬';
+    if (lowerCategory.contains('books')) return '📚';
+    if (lowerCategory.contains('geography')) return '🌍';
+    if (lowerCategory.contains('sports')) return '⚽';
+    if (lowerCategory.contains('mathematics')) return '🧮';
+    if (lowerCategory.contains('animals')) return '🐾';
+    if (lowerCategory.contains('video games')) return '🎮';
+    if (lowerCategory.contains('general knowledge')) return '📖';
+    if (lowerCategory.contains('mixed') || lowerCategory.contains('random'))
+      return '🎲';
+    return '🎯';
+  }
 
   Future<void> _enterGame() async {
     if (_isStartingGame || !mounted) return;
     _isStartingGame = true;
 
-    // Trigger the start one last time just in case, but don't await it
-    // to ensure the navigation transition is instant.
-    ref.read(gameRepositoryProvider).startGame(widget.roomId);
+    await ref.read(gameRepositoryProvider).startGame(widget.roomId);
+    if (!mounted) return;
 
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (_) => GameScreen(roomId: widget.roomId)),
@@ -40,13 +55,6 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
     if (_timer != null) return;
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) return;
-
-      // Pre-emptively start the game in Firestore when countdown is nearly finished.
-      // This hides the network latency so the transition to GameScreen is instant.
-      if (_countdown == 1) {
-        ref.read(gameRepositoryProvider).startGame(widget.roomId);
-      }
-
       setState(() {
         if (_countdown > 0) {
           _countdown--;
@@ -81,13 +89,6 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
           final p1 = room.player1;
           final p2 = room.player2;
 
-          final isP1 = currentUser?.uid == p1['uid'];
-          final isP2 = p2 != null && currentUser?.uid == p2['uid'];
-          final amIReady = isP1
-              ? (p1['isReady'] == true)
-              : (isP2 ? (p2['isReady'] == true) : false);
-
-          // If both players are ready, start the timer
           if (p1['isReady'] == true && p2 != null && p2['isReady'] == true) {
             _startCountdown();
           }
@@ -143,6 +144,46 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                                         color: AppColors.neonAmber,
                                         fontSize: 32,
                                         letterSpacing: 4)),
+                                if (room.roomCode.isNotEmpty) ...[
+                                  const SizedBox(height: 32),
+                                  Text(
+                                    'MATCH TOPIC',
+                                    style: AppTextStyles.label.copyWith(
+                                      fontSize: 9,
+                                      color: AppColors.textSecondary,
+                                      letterSpacing: 2,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Text(
+                                        room.categoryName == 'Loading'
+                                            ? '⏳'
+                                            : room.categoryName.isEmpty
+                                                ? '❓'
+                                                : _getCategoryIcon(
+                                                    room.categoryName),
+                                        style: const TextStyle(fontSize: 18),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        room.categoryName == 'Loading'
+                                            ? 'LOADING...'
+                                            : room.categoryName.isEmpty
+                                                ? 'NOT SELECTED'
+                                                : room.categoryName
+                                                    .toUpperCase(),
+                                        style: AppTextStyles.label.copyWith(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w900,
+                                          letterSpacing: 2,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
                               ],
                             )
                           : Column(
@@ -168,7 +209,6 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                   ),
                 ],
               ),
-
               Center(
                 child: Container(
                   padding: const EdgeInsets.all(20),
@@ -179,7 +219,6 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                           .copyWith(color: AppColors.neonAmber, fontSize: 24)),
                 ).animate().scale(delay: 400.ms, curve: Curves.elasticOut),
               ),
-
               if (p1['isReady'] == true && p2 != null && p2['isReady'] == true)
                 Container(
                   color: Colors.black87,
@@ -192,60 +231,49 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                         .fadeOut(delay: 500.ms),
                   ),
                 ),
-
-              // Ready Button
-              if (p2 != null && !amIReady)
+              if (p2 != null &&
+                  !(p1['isReady'] == true && p2['isReady'] == true))
                 Positioned(
                   bottom: 40,
                   left: 40,
                   right: 40,
                   child: ElevatedButton(
-                    onPressed: _isMarkingReady
-                        ? null
-                        : () async {
-                            if (currentUser == null) return;
+                    onPressed: () async {
+                      if (currentUser == null) return;
 
-                            setState(() => _isMarkingReady = true);
+                      final isP1 = currentUser.uid == p1['uid'];
+                      final playerNum = isP1 ? 1 : 2;
 
-                            try {
-                              await ref
-                                  .read(gameRepositoryProvider)
-                                  .setPlayerReady(
-                                    widget.roomId,
-                                    isP1 ? 1 : (isP2 ? 2 : 0),
-                                    currentUser.uid,
-                                  );
-                            } catch (e) {
-                              if (mounted) {
-                                setState(() => _isMarkingReady = false);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                      content: Text('Failed to set ready: $e')),
-                                );
-                              }
-                            }
-                          },
+                      // Rely solely on the toggle from Battle Hub
+                      final bool activateProtection =
+                          currentUser.rankProtectionActive;
+
+                      await ref
+                          .read(gameRepositoryProvider)
+                          .activateRankProtectionForMatch(
+                            widget.roomId,
+                            playerNum,
+                            activateProtection,
+                          );
+
+                      await ref.read(gameRepositoryProvider).setPlayerReady(
+                            widget.roomId,
+                            playerNum,
+                            currentUser.uid,
+                          );
+                    },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.neonViolet,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12)),
-                      disabledBackgroundColor:
-                          AppColors.purple.withValues(alpha: 0.6),
                     ),
-                    child: _isMarkingReady
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white),
-                          )
-                        : Text('I AM READY!',
-                            style: AppTextStyles.bodyLg.copyWith(
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 2,
-                                color: Colors.white)),
+                    child: Text('I AM READY!',
+                        style: AppTextStyles.bodyLg.copyWith(
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 2,
+                            color: Colors.white)),
                   ),
                 ),
             ],

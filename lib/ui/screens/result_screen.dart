@@ -1,5 +1,8 @@
-import 'dart:async';
+// WHAT THIS FILE DOES:
+// Displays the final scores, the winner, and rewards (XP/Coins).
+
 import 'dart:io';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -7,6 +10,7 @@ import 'package:screenshot/screenshot.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:confetti/confetti.dart';
+
 import '../../core/constants/colors.dart';
 import '../../core/constants/text_styles.dart';
 import '../../providers/user_providers.dart';
@@ -18,7 +22,6 @@ import '../../data/models/user_model.dart';
 import '../../data/models/match_end_result.dart';
 import '../../data/services/rank_service.dart';
 import '../../core/utils/level_system.dart';
-import '../../core/utils/rank_system.dart';
 import '../widgets/victory_card.dart';
 import '../widgets/xp_summary_card.dart';
 import '../widgets/rank_badge.dart';
@@ -89,9 +92,12 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
       final isWinner = widget.room.winnerId == currentUser.uid;
       final isDraw = widget.room.winnerId == 'draw';
 
-      final myScore = currentUser.uid == widget.room.player1['uid']
-          ? widget.room.player1['score']
-          : (widget.room.player2?['score'] ?? 0);
+      final myData = currentUser.uid == widget.room.player1['uid']
+          ? widget.room.player1
+          : widget.room.player2;
+
+      final myScore = myData?['score'] ?? 0;
+      final rankProtectionActive = myData?['rankProtectionActive'] ?? false;
 
       final correctAnswers = myScore ~/ 10;
       const totalQuestions = 10;
@@ -103,34 +109,35 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
             isDraw: isDraw,
             correctAnswers: correctAnswers,
             totalQuestions: totalQuestions,
-            coinsGained: isWinner ? 20 : 5,
+            coinsGained: isWinner ? 20 : (isDraw ? 10 : 5),
             isArenaBreakerWin: widget.room.isArenaBreakerWin,
             isRanked: widget.room.isRanked,
+            rankProtectionActive: rankProtectionActive,
           );
 
       final opponentScore = currentUser.uid == widget.room.player1['uid']
           ? (widget.room.player2?['score'] ?? 0)
           : widget.room.player1['score'];
 
-      final opponentAvatar = currentUser.uid == widget.room.player1['uid']
-          ? (widget.room.player2?['avatarUrl'])
-          : widget.room.player1['avatarUrl'];
-
       final opponentName = currentUser.uid == widget.room.player1['uid']
           ? (widget.room.player2?['username'] ?? 'Opponent')
           : widget.room.player1['username'];
 
+      final opponentAvatar = currentUser.uid == widget.room.player1['uid']
+          ? (widget.room.player2?['avatarUrl'])
+          : widget.room.player1['avatarUrl'];
+
       final history = MatchModel(
         id: widget.room.roomId,
         opponentName: opponentName,
-        opponentAvatarUrl: opponentAvatar,
+        opponentAvatarUrl: opponentAvatar ?? 'f1',
         playerScore: myScore,
         opponentScore: opponentScore,
-        xpEarned: result?.xpRewards.total ?? 0,
+        xpEarned:
+            result?.xpRewards.total ?? (isWinner ? 50 : (isDraw ? 25 : 15)),
         timestamp: DateTime.now(),
       );
 
-      // 2. Mark rewards as claimed and save history
       await Future.wait([
         ref.read(gameRepositoryProvider).claimRewards(
               widget.room.roomId,
@@ -293,13 +300,27 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
                               fontSize: 10)),
                     ],
                   ).animate().fadeIn(),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 16),
                   if (_leveledUp)
                     _buildStatusBanner('LEVEL UP!', AppColors.gold),
                   if (_matchResult?.rankUpdate.promoted == true)
                     _buildStatusBanner('PROMOTED!', AppColors.teal),
                   if (_matchResult?.rankUpdate.demoted == true)
                     _buildStatusBanner('DEMOTED', AppColors.red),
+                  SizedBox(
+                    height: 100,
+                    child: isWinner
+                        ? const Icon(Icons.emoji_events_rounded,
+                            size: 80, color: AppColors.gold)
+                        : (isDraw
+                            ? const Icon(Icons.handshake_rounded,
+                                size: 80, color: AppColors.gold)
+                            : const Icon(
+                                Icons.sentiment_very_dissatisfied_rounded,
+                                size: 80,
+                                color: AppColors.red)),
+                  ).animate().scale(duration: 800.ms, curve: Curves.elasticOut),
+                  const SizedBox(height: 24),
                   Text(
                     widget.isPractice
                         ? 'PRACTICE COMPLETE'
@@ -331,6 +352,51 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
                       style: AppTextStyles.bodyMd.copyWith(
                           color: AppColors.textSecondary, fontSize: 14),
                     ).animate().fadeIn(delay: 400.ms),
+                  const SizedBox(height: 32),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _PlayerSummary(
+                          username: currentUser.username,
+                          avatarUrl: currentUser.avatarUrl,
+                          rank: currentUser.rank,
+                          isWinner: isWinner,
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Row(
+                            children: [
+                              Text('$myScore',
+                                  style: AppTextStyles.display.copyWith(
+                                      color: AppColors.teal,
+                                      fontSize: 26,
+                                      letterSpacing: 0)),
+                              const SizedBox(width: 8),
+                              Text('-',
+                                  style: AppTextStyles.display.copyWith(
+                                      color: AppColors.textMuted,
+                                      fontSize: 18,
+                                      letterSpacing: 0)),
+                              const SizedBox(width: 8),
+                              Text('$opponentScore',
+                                  style: AppTextStyles.display.copyWith(
+                                      color: AppColors.red,
+                                      fontSize: 26,
+                                      letterSpacing: 0)),
+                            ],
+                          ),
+                        ),
+                        _PlayerSummary(
+                          username: opponentName,
+                          avatarUrl: opponentAvatar,
+                          rank: 'Opponent',
+                          isWinner: !isWinner && !isDraw,
+                        ),
+                      ],
+                    ),
+                  ).animate().slideY(begin: 0.2, end: 0).fadeIn(delay: 600.ms),
                   const SizedBox(height: 32),
                   _buildScoreCard(myScore, opponentScore),
                   const SizedBox(height: 32),
@@ -423,13 +489,13 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
                           opponentName,
                           myScore,
                           opponentScore,
-                          _matchResult?.xpRewards.total ?? 0,
+                          _matchResult?.xpRewards.total ?? 50,
                           20,
                           isMvp,
                         ),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.gold,
-                          foregroundColor: Colors.black,
+                          backgroundColor: AppColors.purple,
+                          foregroundColor: Colors.white,
                           minimumSize: const Size(double.infinity, 56),
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16)),
@@ -444,7 +510,7 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
                                     fontWeight: FontWeight.bold, fontSize: 14)),
                           ],
                         ),
-                      ).animate().fadeIn(delay: 1200.ms).scale(),
+                      ).animate().fadeIn(delay: 1000.ms).scale(),
                     const SizedBox(height: 12),
                     ElevatedButton(
                       onPressed: !_rewardsClaimed
@@ -599,9 +665,6 @@ class _PlayerSummary extends StatelessWidget {
           showGlow: isWinner,
           showBorder: true,
         ),
-        if (isWinner)
-          const Icon(Icons.workspace_premium_rounded,
-              color: AppColors.gold, size: 20),
         const SizedBox(height: 12),
         Text(username, style: AppTextStyles.headline.copyWith(fontSize: 14)),
         Text(rank,
@@ -683,10 +746,7 @@ class _VictoryCardModalState extends State<_VictoryCardModal> {
       const shareMessage =
           "I just won a battle on QuestArena!🏆\n\nThink you can beat me? 🧠\nChallenge me and prove it.\n\n🎮 Play now:\nhttps://quest-arena-self.vercel.app/";
 
-      await Share.shareXFiles(
-        [XFile(imagePath.path)],
-        text: shareMessage,
-      );
+      await Share.share(shareMessage);
     } catch (e) {
       debugPrint('Share Error: $e');
     }
@@ -815,39 +875,6 @@ class _ResultRow extends StatelessWidget {
         Text(label, style: AppTextStyles.label),
         Text(value,
             style: AppTextStyles.display.copyWith(fontSize: 24, color: color)),
-      ],
-    );
-  }
-}
-
-class _RewardItem extends StatelessWidget {
-  final String label;
-  final String value;
-  final IconData icon;
-  final Color color;
-  final bool isProcessing;
-
-  const _RewardItem({
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.color,
-    this.isProcessing = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Icon(icon, color: isProcessing ? Colors.grey : color, size: 28),
-        const SizedBox(height: 8),
-        isProcessing
-            ? const SizedBox(
-                height: 20,
-                width: 20,
-                child: CircularProgressIndicator(strokeWidth: 2))
-            : Text(value, style: AppTextStyles.headline.copyWith(fontSize: 20)),
-        Text(label, style: AppTextStyles.label.copyWith(fontSize: 10)),
       ],
     );
   }

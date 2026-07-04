@@ -3,17 +3,23 @@
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'auth_providers.dart';
-import '../data/services/firestore_service.dart';
-import '../data/repositories/user_repository.dart';
 import 'package:dio/dio.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:questarena/providers/auth_providers.dart';
+import 'package:questarena/data/services/firestore_service.dart';
+import 'package:questarena/data/repositories/user_repository.dart';
+import 'package:questarena/data/repositories/friends_repository.dart';
+import 'package:questarena/data/models/user_model.dart';
+import 'package:questarena/data/models/match_history_model.dart';
+import 'package:questarena/data/models/leaderboard_model.dart';
+import 'package:questarena/core/errors/result.dart';
 import '../data/models/user_model.dart';
 import '../data/models/match_history_model.dart';
 
 final dioProvider = Provider((ref) => Dio(BaseOptions(
-  connectTimeout: const Duration(seconds: 5),
-  receiveTimeout: const Duration(seconds: 5),
-)));
+      connectTimeout: const Duration(seconds: 5),
+      receiveTimeout: const Duration(seconds: 5),
+    )));
 
 final firestoreServiceProvider = Provider((ref) => FirestoreService());
 
@@ -21,6 +27,8 @@ final userRepositoryProvider = Provider((ref) {
   final service = ref.watch(firestoreServiceProvider);
   return UserRepository(service);
 });
+
+final friendsRepositoryProvider = Provider((ref) => FriendsRepository());
 
 final currentUserProvider = StreamProvider.autoDispose<UserModel?>((ref) {
   final authState = ref.watch(authStateProvider).value;
@@ -32,10 +40,57 @@ final currentUserProvider = StreamProvider.autoDispose<UserModel?>((ref) {
   });
 });
 
-final matchHistoryProvider = StreamProvider.autoDispose<List<MatchModel>>((ref) {
+final userProfileProvider =
+    FutureProvider.family<UserModel?, String>((ref, uid) async {
+  final repo = ref.watch(userRepositoryProvider);
+  final result = await repo.getUserProfile(uid);
+  return switch (result) {
+    Success(data: final user) => user,
+    Failure() => null,
+  };
+});
+
+final matchHistoryProvider =
+    StreamProvider.autoDispose<List<MatchModel>>((ref) {
   final authState = ref.watch(authStateProvider).value;
   if (authState == null) return Stream.value([]);
 
   final repo = ref.watch(userRepositoryProvider);
-  return repo.watchMatchHistory(authState.uid);
+  return repo.watchMatchHistory(authState.uid,
+      limit: 50); // Limit dashboard to 50 for performance
+});
+
+final userMatchHistoryProvider =
+    FutureProvider.family<List<MatchModel>, String>((ref, uid) async {
+  final repo = ref.watch(userRepositoryProvider);
+  // Fetch full history for calculation on profile card
+  return repo.watchMatchHistory(uid).first;
+});
+
+// Real-time friends system providers
+final friendsProvider =
+    StreamProvider.autoDispose<List<LeaderboardModel>>((ref) {
+  final authState = ref.watch(authStateProvider).value;
+  if (authState == null) return Stream.value([]);
+
+  final repo = ref.watch(friendsRepositoryProvider);
+  return repo.watchFriends(authState.uid);
+});
+
+final incomingRequestsProvider = StreamProvider.autoDispose<
+    List<QueryDocumentSnapshot<Map<String, dynamic>>>>((ref) {
+  final authState = ref.watch(authStateProvider).value;
+  if (authState == null) return Stream.value([]);
+
+  final repo = ref.watch(friendsRepositoryProvider);
+  return repo.watchIncomingRequests(authState.uid);
+});
+
+final outgoingRequestsProvider = StreamProvider.autoDispose<
+    List<QueryDocumentSnapshot<Map<String, dynamic>>>>((ref) {
+  final authState = ref.watch(authStateProvider).value;
+  if (authState == null) return Stream.value([]);
+
+  final repo = ref.watch(friendsRepositoryProvider);
+  return repo.watchOutgoingRequests(authState.uid);
 });
