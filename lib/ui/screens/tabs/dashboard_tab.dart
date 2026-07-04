@@ -4,13 +4,12 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../../../core/constants/colors.dart';
 import '../../../core/constants/text_styles.dart';
 import '../../../providers/user_providers.dart';
-import '../../../providers/matchmaking_providers.dart';
-import '../../../data/models/matchmaking_model.dart';
+import '../../../data/models/match_history_model.dart';
 import '../store_screen.dart';
-import '../matchmaking_screen.dart';
 import '../match_history_screen.dart';
-import '../../widgets/category_picker_sheet.dart';
+import '../match_summary_screen.dart';
 import '../../../core/utils/rank_system.dart';
+import '../../../core/utils/game_utils.dart';
 import '../../widgets/rank_badge.dart';
 import '../../widgets/rank_progress_bar.dart';
 import '../../widgets/xp_progress_bar.dart';
@@ -206,85 +205,7 @@ class _DashboardTabState extends ConsumerState<DashboardTab> with TickerProvider
 
                       const SizedBox(height: 32),
 
-                      // BATTLE BUTTON (Quick Action from Upstream)
-                      GestureDetector(
-                        onTap: () async {
-                          final category = await CategoryPickerSheet.show(context);
-                          if (category == null || !context.mounted) return;
-                          final ticket = MatchmakingModel(
-                            uid: user.uid,
-                            username: user.username,
-                            avatarUrl: user.avatarUrl,
-                            rank: user.rank,
-                            categoryId: category.id,
-                            categoryName: category.name,
-                            eloRating: user.eloRating,
-                            searchStartedAt: DateTime.now(),
-                          );
-
-                          await ref.read(matchmakingRepositoryProvider).startSearching(ticket);
-
-                          if (context.mounted) {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => MatchmakingScreen(categoryName: category.name),
-                              ),
-                            );
-                          }
-                        },
-                        child: Container(
-                          height: 140,
-                          width: double.infinity,
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [AppColors.purple, Color(0xFF5A3EBC)],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                            borderRadius: BorderRadius.circular(24),
-                            boxShadow: [
-                              BoxShadow(
-                                color: AppColors.purple.withValues(alpha: 0.5),
-                                blurRadius: 30,
-                                spreadRadius: 2,
-                                offset: const Offset(0, 10),
-                              ),
-                            ],
-                          ),
-                          child: Stack(
-                            children: [
-                              Positioned(
-                                right: -20,
-                                bottom: -20,
-                                child: Icon(
-                                  Icons.flash_on_rounded,
-                                  size: 140,
-                                  color: Colors.white.withValues(alpha: 0.1),
-                                ),
-                              ),
-                              Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Icon(
-                                      Icons.play_arrow_rounded,
-                                      size: 40,
-                                      color: Colors.white,
-                                    ),
-                                    Text(
-                                      'BATTLE NOW',
-                                      style: AppTextStyles.display.copyWith(
-                                        color: Colors.white,
-                                        fontSize: 24,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ).animate().fadeIn(delay: 600.ms).scale(),
+                      const _RecentMatchHistorySection(),
                     ],
                   ),
                 ),
@@ -293,6 +214,205 @@ class _DashboardTabState extends ConsumerState<DashboardTab> with TickerProvider
           ),
         );
       },
+    );
+  }
+}
+
+class _RecentMatchHistorySection extends ConsumerWidget {
+  const _RecentMatchHistorySection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final historyAsync = ref.watch(matchHistoryProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'MATCH HISTORY',
+              style: AppTextStyles.label.copyWith(letterSpacing: 2, fontWeight: FontWeight.w900),
+            ),
+            TextButton(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const MatchHistoryScreen()),
+              ),
+              child: Row(
+                children: [
+                  Text(
+                    'View All',
+                    style: TextStyle(color: AppColors.gold.withValues(alpha: 0.8), fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(Icons.chevron_right_rounded, size: 16, color: AppColors.gold.withValues(alpha: 0.8)),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        historyAsync.when(
+          loading: () => const Center(child: Padding(
+            padding: EdgeInsets.all(20.0),
+            child: CircularProgressIndicator(color: AppColors.gold),
+          )),
+          error: (e, s) {
+            debugPrint('Match History Error: $e');
+            return Container(
+              padding: const EdgeInsets.all(24),
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: AppColors.cardBg.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: AppColors.red.withValues(alpha: 0.3), width: 1),
+              ),
+              child: Column(
+                children: [
+                  const Icon(Icons.error_outline_rounded, size: 32, color: AppColors.red),
+                  const SizedBox(height: 12),
+                  Text(
+                    'History unavailable',
+                    style: AppTextStyles.headline.copyWith(fontSize: 16, color: Colors.white70),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Try again later',
+                    style: AppTextStyles.label.copyWith(fontSize: 10),
+                  ),
+                ],
+              ),
+            );
+          },
+          data: (history) {
+            if (history.isEmpty) {
+              return Container(
+                padding: const EdgeInsets.symmetric(vertical: 40),
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: AppColors.cardBg.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: AppColors.surface, width: 1),
+                ),
+                child: Column(
+                  children: [
+                    const Icon(Icons.history_rounded, size: 48, color: AppColors.textMuted),
+                    const SizedBox(height: 16),
+                    Text(
+                      'No matches played yet.',
+                      style: AppTextStyles.headline.copyWith(fontSize: 16, color: Colors.white70),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Play your first battle to build your history.',
+                      style: AppTextStyles.label.copyWith(fontSize: 10),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            final recentMatches = history.take(5).toList();
+
+            return ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: recentMatches.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              itemBuilder: (context, index) {
+                final match = recentMatches[index];
+                final isWin = match.result == MatchResult.win;
+                final isDraw = match.result == MatchResult.draw;
+
+                return GestureDetector(
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => MatchSummaryScreen(match: match)),
+                  ),
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppColors.cardBg.withValues(alpha: 0.8),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: isWin 
+                            ? AppColors.teal.withValues(alpha: 0.3) 
+                            : (isDraw ? AppColors.gold.withValues(alpha: 0.3) : AppColors.red.withValues(alpha: 0.1)),
+                        width: 1.5,
+                      ),
+                      boxShadow: isWin ? [
+                        BoxShadow(
+                          color: AppColors.teal.withValues(alpha: 0.05),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        )
+                      ] : null,
+                    ),
+                    child: Row(
+                      children: [
+                        // Result Badge
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: (isWin ? AppColors.teal : (isDraw ? AppColors.gold : AppColors.red)).withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            isWin ? 'WIN' : (isDraw ? 'DRAW' : 'LOSS'),
+                            style: TextStyle(
+                              color: isWin ? AppColors.teal : (isDraw ? AppColors.gold : AppColors.red),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        // Opponent Info
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'vs ${match.opponentName}',
+                                style: AppTextStyles.bodyMd.copyWith(fontWeight: FontWeight.bold, fontSize: 15),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '${match.matchTypeLabel} • ${GameUtils.getRelativeTime(match.timestamp)}',
+                                style: AppTextStyles.label.copyWith(fontSize: 10, color: AppColors.textMuted),
+                              ),
+                            ],
+                          ),
+                        ),
+                        // RP Change
+                        if (match.matchTypeLabel == 'Ranked' && match.rpChange != 0)
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                match.rpChange > 0 ? '+${match.rpChange} RP' : '${match.rpChange} RP',
+                                style: AppTextStyles.headline.copyWith(
+                                  fontSize: 16,
+                                  color: match.rpChange > 0 ? AppColors.teal : AppColors.red,
+                                  letterSpacing: 0,
+                                ),
+                              ),
+                              const Icon(Icons.chevron_right_rounded, size: 16, color: AppColors.textMuted),
+                            ],
+                          )
+                        else
+                          const Icon(Icons.chevron_right_rounded, size: 20, color: AppColors.textMuted),
+                      ],
+                    ),
+                  ).animate().fadeIn(delay: (index * 100).ms).slideX(begin: 0.1, end: 0),
+                );
+              },
+            );
+          },
+        ).animate().fadeIn(delay: 600.ms),
+      ],
     );
   }
 }

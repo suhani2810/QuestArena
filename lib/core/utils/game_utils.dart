@@ -74,6 +74,20 @@ class GameUtils {
     return streak;
   }
 
+  // Relative time formatter
+  static String getRelativeTime(DateTime timestamp) {
+    final now = DateTime.now();
+    final difference = now.difference(timestamp);
+
+    if (difference.inSeconds < 60) return 'Just now';
+    if (difference.inMinutes < 60) return '${difference.inMinutes}m ago';
+    if (difference.inHours < 24) return '${difference.inHours}h ago';
+    if (difference.inDays == 1) return 'Yesterday';
+    if (difference.inDays < 7) return '${difference.inDays}d ago';
+    
+    return '${timestamp.day}/${timestamp.month}/${timestamp.year}';
+  }
+
   // Emergency Fallback questions in case Cloud Function fails
   static List<Map<String, dynamic>> getFallbackQuestions() {
     final questions = [

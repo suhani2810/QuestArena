@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 enum MatchResult { win, loss, draw }
 
@@ -9,6 +10,10 @@ class MatchModel {
   final int playerScore;
   final int opponentScore;
   final int xpEarned;
+  final int rpChange;
+  final String matchType;
+  final String categoryName;
+  final int durationSeconds;
   final DateTime timestamp;
 
   MatchModel({
@@ -18,6 +23,10 @@ class MatchModel {
     required this.playerScore,
     required this.opponentScore,
     required this.xpEarned,
+    required this.rpChange,
+    required this.matchType,
+    required this.categoryName,
+    required this.durationSeconds,
     required this.timestamp,
   });
 
@@ -25,6 +34,21 @@ class MatchModel {
     if (playerScore > opponentScore) return MatchResult.win;
     if (playerScore < opponentScore) return MatchResult.loss;
     return MatchResult.draw;
+  }
+
+  String get matchTypeLabel {
+    switch (matchType.toLowerCase()) {
+      case 'ranked':
+        return 'Ranked';
+      case 'private_duel':
+      case 'private duel':
+      case 'private':
+        return 'Private Duel';
+      case 'practice':
+        return 'Practice';
+      default:
+        return 'Ranked';
+    }
   }
 
   factory MatchModel.fromJson(Map<String, dynamic> json) {
@@ -36,8 +60,8 @@ class MatchModel {
           parsedDate = val;
         } else if (val is String) {
           parsedDate = DateTime.parse(val);
-        } else {
-          parsedDate = (val as dynamic).toDate();
+        } else if (val is Timestamp) {
+          parsedDate = val.toDate();
         }
       }
     } catch (e) {
@@ -51,6 +75,10 @@ class MatchModel {
       playerScore: json['myScore'] ?? json['playerScore'] ?? 0,
       opponentScore: json['opponentScore'] ?? 0,
       xpEarned: json['xpGained'] ?? json['xpEarned'] ?? 0,
+      rpChange: json['rpChange'] ?? 0,
+      matchType: json['matchType'] ?? 'ranked',
+      categoryName: json['categoryName'] ?? 'General Knowledge',
+      durationSeconds: json['durationSeconds'] ?? 0,
       timestamp: parsedDate,
     );
   }
@@ -62,6 +90,10 @@ class MatchModel {
     'playerScore': playerScore,
     'opponentScore': opponentScore,
     'xpEarned': xpEarned,
+    'rpChange': rpChange,
+    'matchType': matchType,
+    'categoryName': categoryName,
+    'durationSeconds': durationSeconds,
     'timestamp': timestamp,
     // Keep legacy fields for Firestore compatibility if needed
     'matchId': id,

@@ -20,6 +20,7 @@ class GameRoomModel {
   final String categoryName;
   final bool isRanked;
   final Map<String, dynamic> powerups;
+  final DateTime? createdAt;
   
   // Arena Breaker Fields
   final bool isArenaBreaker;
@@ -58,6 +59,7 @@ class GameRoomModel {
     this.arenaBreakerStatusMessage,
     this.presence = const {},
     this.forfeitWinnerId,
+    this.createdAt,
   });
 
   factory GameRoomModel.fromJson(Map<String, dynamic> json) {
@@ -90,6 +92,11 @@ class GameRoomModel {
       arenaBreakerStatusMessage: json['arenaBreakerStatusMessage'],
       presence: Map<String, dynamic>.from(json['presence'] ?? {}),
       forfeitWinnerId: json['forfeitWinnerId'],
+      createdAt: json['createdAt'] != null 
+          ? (json['createdAt'] is Timestamp 
+              ? (json['createdAt'] as Timestamp).toDate() 
+              : DateTime.tryParse(json['createdAt'].toString()))
+          : null,
     );
   }
 
@@ -118,6 +125,7 @@ class GameRoomModel {
     'arenaBreakerStatusMessage': arenaBreakerStatusMessage,
     'presence': presence,
     'forfeitWinnerId': forfeitWinnerId,
+    'createdAt': createdAt != null ? Timestamp.fromDate(createdAt!) : null,
   };
 
   GameRoomModel copyWith({

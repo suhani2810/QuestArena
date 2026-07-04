@@ -118,6 +118,7 @@ class GameRepository {
   Future<void> startGame(String roomId) async {
     await _db.collection('gameRooms').doc(roomId).update({
       'status': 'active',
+      'createdAt': FieldValue.serverTimestamp(), // Mark actual match start
       'questionStartedAt': FieldValue.serverTimestamp(),
       'currentQuestionIndex': 0,
     });

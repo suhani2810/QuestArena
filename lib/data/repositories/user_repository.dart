@@ -242,18 +242,24 @@ class UserRepository {
   }
 
   Stream<List<MatchModel>> watchMatchHistory(String uid, {int? limit}) {
-    var query = FirebaseFirestore.instance
+    // To avoid mandatory composite index [matchType + timestamp], 
+    // we fetch everything ordered by time and filter match types in memory.
+    return FirebaseFirestore.instance
         .collection('users')
         .doc(uid)
         .collection('matchHistory')
-        .orderBy('timestamp', descending: true);
-    
-    if (limit != null) query = query.limit(limit);
+        .orderBy('timestamp', descending: true)
+        .limit(limit ?? 100)
+        .snapshots()
+        .map((snapshot) {
+      final matches = snapshot.docs.map((doc) => MatchModel.fromJson(doc.data())).toList();
 
-    return query.snapshots().map((snapshot) {
-      return snapshot.docs
-          .map((doc) => MatchModel.fromJson(doc.data()))
-          .toList();
+      // Filter: Show Ranked and Private Duels. Exclude Practice.
+      return matches.where((m) {
+        final type = m.matchType.toLowerCase();
+        // Allow ranked (including fallbacks) and various private duel strings.
+        return type == 'ranked' || type == 'private_duel' || type == 'private duel' || type == 'private';
+      }).toList();
     });
   }
 }

@@ -106,7 +106,7 @@ class _PracticeSetupScreenState extends State<PracticeSetupScreen> {
                   difficulty: _selectedDifficulty,
                   bot: BotProfile.random(),
                 );
-                Navigator.pushReplacement(
+                Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => PracticeGameScreen(session: session)),
                 );

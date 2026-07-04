@@ -6,6 +6,7 @@ import '../../../core/constants/text_styles.dart';
 import '../../../core/utils/game_utils.dart';
 import '../../../data/models/game_room_model.dart';
 import '../../../providers/user_providers.dart';
+import '../../../ui/screens/result_screen.dart';
 import '../models/practice_models.dart';
 import '../providers/practice_controller.dart';
 
@@ -131,108 +132,8 @@ class _PracticeGameScreenState extends ConsumerState<PracticeGameScreen> with Si
     _resultsShown = true;
     _timerController.stop();
 
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => Dialog(
-        insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-        backgroundColor: Colors.transparent,
-        child: Container(
-          width: double.infinity,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                AppColors.teal.withValues(alpha: 0.95),
-                AppColors.primaryBg.withValues(alpha: 0.98),
-              ],
-            ),
-            borderRadius: BorderRadius.circular(32),
-            border: Border.all(color: AppColors.teal.withValues(alpha: 0.5), width: 1),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.teal.withValues(alpha: 0.2),
-                blurRadius: 20,
-                spreadRadius: 5,
-              ),
-            ],
-          ),
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 2),
-                ),
-                child: const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 48),
-              ),
-              const SizedBox(height: 24),
-              Text(
-                'PRACTICE COMPLETE',
-                style: AppTextStyles.headline.copyWith(fontSize: 22, color: Colors.white),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'You vs ${room.player2?['username'] ?? 'Bot'}',
-                style: AppTextStyles.label.copyWith(color: Colors.white.withValues(alpha: 0.7)),
-              ),
-              const SizedBox(height: 32),
-              
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _ScoreBadge(label: 'YOU', score: room.player1['score'], color: AppColors.teal),
-                  Text('VS', style: AppTextStyles.label.copyWith(color: Colors.white.withValues(alpha: 0.3))),
-                  _ScoreBadge(label: 'BOT', score: room.player2?['score'] ?? 0, color: AppColors.red),
-                ],
-              ),
-
-              const SizedBox(height: 40),
-
-              Row(
-                children: [
-                  Expanded(
-                    child: TextButton(
-                      onPressed: () {
-                        Navigator.pop(context); // Close dialog
-                        Navigator.pop(context); // Back to Setup
-                      },
-                      child: Text(
-                        'BACK TO HUB',
-                        style: AppTextStyles.label.copyWith(color: Colors.white.withValues(alpha: 0.7)),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        // Restart practice
-                        ref.invalidate(practiceControllerProvider(widget.session));
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: AppColors.teal,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        elevation: 0,
-                      ),
-                      child: const Text('REPLAY', style: TextStyle(fontWeight: FontWeight.bold)),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ).animate().scale(duration: 400.ms, curve: Curves.easeOutBack),
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => ResultScreen(room: room, isPractice: true)),
     );
   }
 
@@ -461,29 +362,4 @@ class _AnswerButton extends StatelessWidget {
   }
 }
 
-class _ScoreBadge extends StatelessWidget {
-  final String label;
-  final int score;
-  final Color color;
-  const _ScoreBadge({required this.label, required this.score, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-      ),
-      child: Column(
-        children: [
-          Text(label, style: AppTextStyles.label.copyWith(fontSize: 10, color: Colors.white.withValues(alpha: 0.5))),
-          const SizedBox(height: 4),
-          Text('$score', style: AppTextStyles.display.copyWith(color: color, fontSize: 32)),
-        ],
-      ),
-    );
-  }
-}
 

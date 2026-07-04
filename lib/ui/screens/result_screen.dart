@@ -134,17 +134,28 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
         playerScore: myScore,
         opponentScore: opponentScore,
         xpEarned: result?.xpRewards.total ?? (isWinner ? 50 : (isDraw ? 25 : 15)),
+        rpChange: result?.rankUpdate.pointsGained ?? 0,
+        matchType: widget.isPractice ? 'practice' : (widget.room.isRanked ? 'ranked' : 'private_duel'),
+        categoryName: widget.room.categoryName,
+        durationSeconds: widget.room.createdAt != null 
+            ? DateTime.now().difference(widget.room.createdAt!).inSeconds 
+            : 0,
         timestamp: DateTime.now(),
       );
 
-      await Future.wait([
+      final List<Future> tasks = [
         ref.read(gameRepositoryProvider).claimRewards(
           widget.room.roomId,
           currentUser.uid,
           isWinner,
         ),
-        ref.read(userRepositoryProvider).saveMatchHistory(currentUser.uid, history),
-      ]).timeout(const Duration(seconds: 10));
+      ];
+
+      if (!widget.isPractice) {
+        tasks.add(ref.read(userRepositoryProvider).saveMatchHistory(currentUser.uid, history));
+      }
+
+      await Future.wait(tasks).timeout(const Duration(seconds: 10));
       
       if (mounted) {
         setState(() {
@@ -505,6 +516,47 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
   }
 
   Widget _buildScoreCard(int myScore, int opponentScore) {
+    if (widget.isPractice) {
+      final userValue = ref.read(currentUserProvider);
+      final currentUser = userValue.value;
+      final myData = currentUser?.uid == widget.room.player1['uid'] 
+          ? widget.room.player1 
+          : widget.room.player2;
+      
+      final List<String> myAnswers = List<String>.from(myData?['answers'] ?? []);
+      int correctCount = 0;
+      for (int i = 0; i < myAnswers.length; i++) {
+        if (i < widget.room.questions.length) {
+          if (myAnswers[i] == widget.room.questions[i]['correct_answer']) {
+            correctCount++;
+          }
+        }
+      }
+      
+      final totalQuestions = widget.room.questions.length;
+      final accuracy = totalQuestions > 0 ? (correctCount / totalQuestions * 100).toInt() : 0;
+
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: AppColors.cardBg,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: AppColors.surface),
+        ),
+        child: Column(
+          children: [
+            _ResultRow(label: 'TOPIC', value: widget.room.categoryName, color: Colors.white),
+            const Divider(color: AppColors.surface, height: 24),
+            _ResultRow(label: 'XP EARNED', value: '0 XP', color: AppColors.gold),
+            const Divider(color: AppColors.surface, height: 24),
+            _ResultRow(label: 'CORRECT ANSWERS', value: '$correctCount/$totalQuestions', color: AppColors.teal),
+            const Divider(color: AppColors.surface, height: 24),
+            _ResultRow(label: 'ACCURACY', value: '$accuracy%', color: AppColors.gold),
+          ],
+        ),
+      ).animate().fadeIn(delay: 200.ms);
+    }
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
