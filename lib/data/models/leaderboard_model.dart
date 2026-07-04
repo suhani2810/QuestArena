@@ -47,6 +47,26 @@ class LeaderboardModel {
   double get mvpScore =>
       (xp / 10) + (wins * 10) + (averageAccuracy * 2) + (currentWinStreak * 5);
 
+  int get rankStrength {
+    const rankOrder = [
+      'Unranked',
+      'Bronze',
+      'Silver',
+      'Gold',
+      'Platinum',
+      'Diamond',
+      'Master',
+      'Champion',
+      'Legend',
+    ];
+
+    final rankIndex = rankOrder.indexOf(rank);
+    final safeRankIndex = rankIndex < 0 ? 0 : rankIndex;
+    final subRankScore = subRank == null ? 0 : (4 - subRank!);
+
+    return (safeRankIndex * 10000) + (subRankScore * 1000) + rankPoints;
+  }
+
   factory LeaderboardModel.fromJson(Map<String, dynamic> json) {
     return LeaderboardModel(
       uid: json['uid'] ?? json['friendUid'] ?? '',

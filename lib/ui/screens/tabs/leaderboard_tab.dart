@@ -106,14 +106,14 @@ class LeaderboardTab extends ConsumerWidget {
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
                               Text(
-                                '${player.eloRating}',
+                                '${player.wins}',
                                 style: AppTextStyles.headline.copyWith(
                                   fontSize: 18,
                                   color: AppColors.gold,
                                 ),
                               ),
                               Text(
-                                'ELO',
+                                'WINS',
                                 style:
                                     AppTextStyles.label.copyWith(fontSize: 8),
                               ),
