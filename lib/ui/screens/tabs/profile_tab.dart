@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/colors.dart';
 import '../../../core/constants/text_styles.dart';
 import '../../../core/utils/rank_system.dart';
@@ -9,8 +9,6 @@ import '../../../providers/auth_providers.dart';
 import '../../../providers/leaderboard_providers.dart';
 import '../../../data/models/leaderboard_model.dart';
 import '../../../data/models/user_model.dart';
-import '../../widgets/xp_progress_bar.dart';
-import '../../widgets/rank_progress_bar.dart';
 import '../../widgets/neon_swirl_background.dart';
 import '../../widgets/smart_avatar.dart';
 import 'edit_profile_screen.dart';
@@ -66,27 +64,41 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with SingleTickerProvid
     );
   }
 
-  void _reportIssue() {
-    // ignore: deprecated_member_use
-    Share.share('Hi support, I found an issue in QuestArena: ', subject: 'QuestArena Bug Report');
+  Future<void> _reportIssue() async {
+    final String subject = Uri.encodeComponent('QuestArena Bug Report');
+    final String body = Uri.encodeComponent('Hello, I would like to report an issue: ');
+    final Uri mailUri = Uri.parse('mailto:imaginati.appdev@gmail.com?subject=$subject&body=$body');
+
+    try {
+      if (!await launchUrl(mailUri, mode: LaunchMode.externalApplication)) {
+        throw 'Could not launch $mailUri';
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to open email app. Please email imaginati.appdev@gmail.com directly.'),
+            backgroundColor: AppColors.neonPink,
+          ),
+        );
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final userAsync = ref.watch(currentUserProvider);
-    final weeklyMvp = ref.watch(weeklyMvpProvider);
 
     return userAsync.when(
       loading: () => const Center(child: CircularProgressIndicator(color: AppColors.gold)),
       error: (e, s) => Center(child: Text('Error: $e')),
       data: (user) {
         if (user == null) return const Center(child: Text('User not found'));
-        final isMvp = (weeklyMvp != null && weeklyMvp.uid == user.uid);
 
         return Scaffold(
           backgroundColor: Colors.transparent,
           appBar: AppBar(
-            title: Text('PLAYER PROFILE', style: AppTextStyles.display.copyWith(fontSize: 18, letterSpacing: 2)),
+            title: Text('PROFILE', style: AppTextStyles.display.copyWith(fontSize: 18, letterSpacing: 4)),
             backgroundColor: Colors.transparent,
             elevation: 0,
             centerTitle: true,
@@ -107,77 +119,50 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with SingleTickerProvid
                   padding: const EdgeInsets.all(24),
                   child: Column(
                     children: [
-                      SmartAvatar(avatarUrl: user.avatarUrl, size: 110, showGlow: true, showBorder: true),
-                      const SizedBox(height: 16),
-                      Text(user.username, style: AppTextStyles.headline.copyWith(fontSize: 24)),
-                      Text(
-                        RankSystem.getRankName(user.rank, user.subRank),
-                        style: AppTextStyles.label.copyWith(color: AppColors.gold, fontWeight: FontWeight.bold, letterSpacing: 1),
+                      // CLEAN HEADER
+                      Center(
+                        child: SmartAvatar(avatarUrl: user.avatarUrl, size: 120, showGlow: true, showBorder: true),
                       ),
+                      const SizedBox(height: 20),
+                      Text(user.username.toUpperCase(), style: AppTextStyles.headline.copyWith(fontSize: 28, letterSpacing: 2)),
                       const SizedBox(height: 24),
 
+                      // UNIFIED EDIT BUTTON (Purple as requested)
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton.icon(
                           onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const EditProfileScreen())),
-                          icon: const Icon(Icons.edit_rounded, size: 18, color: Colors.white),
-                          label: const Text('EDIT PROFILE', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                          icon: const Icon(Icons.tune_rounded, size: 20, color: Colors.white),
+                          label: const Text('EDIT PROFILE', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.purple.withValues(alpha: 0.6),
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: AppColors.neonViolet.withValues(alpha: 0.3))),
+                            backgroundColor: AppColors.purple,
+                            padding: const EdgeInsets.symmetric(vertical: 18),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                            elevation: 8,
+                            shadowColor: AppColors.purple.withValues(alpha: 0.4),
                           ),
                         ),
                       ),
 
-                      if (isMvp) _buildMvpBadge(),
                       const SizedBox(height: 40),
 
-                      _buildStatsOverview(user),
+                      // UNIFIED ANALYTICS CARD
+                      _buildAnalyticsSection(user),
 
                       const SizedBox(height: 32),
 
-                      _buildProgressSection(user),
-                      
-                      const SizedBox(height: 32),
-
+                      // SOCIAL SECTION
                       const _FriendRequestsSection(),
                       const _FriendsListSection(),
 
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 40),
 
-                      _buildDetailedStats(user),
-
-                      const SizedBox(height: 48),
-
-                      Container(
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: AppColors.cardBg.withValues(alpha: 0.5),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: AppColors.surface),
-                        ),
-                        child: Column(
-                          children: [
-                            const Text('NEED HELP?', style: TextStyle(color: AppColors.textMuted, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 2)),
-                            const SizedBox(height: 16),
-                            _SupportButton(
-                              icon: Icons.bug_report_rounded,
-                              label: 'REPORT AN ISSUE',
-                              color: AppColors.neonPink,
-                              onTap: _reportIssue,
-                            ),
-                            const Divider(color: AppColors.surface, height: 24),
-                            Text(
-                              'Email: imaginati.appdev@gmail.com',
-                              style: AppTextStyles.label.copyWith(fontSize: 9, color: AppColors.textMuted),
-                            ),
-                          ],
-                        ),
-                      ),
+                      // SUPPORT CARD
+                      _buildSupportSection(),
 
                       const SizedBox(height: 48),
 
+                      // DELETE ACCOUNT
                       TextButton.icon(
                         onPressed: () => _showDeleteConfirmation(context, user.uid),
                         icon: const Icon(Icons.delete_forever_rounded, color: AppColors.red, size: 20),
@@ -186,7 +171,7 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with SingleTickerProvid
                           style: AppTextStyles.label.copyWith(color: AppColors.red, fontWeight: FontWeight.bold),
                         ),
                       ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 32),
                     ],
                   ),
                 ),
@@ -198,88 +183,97 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with SingleTickerProvid
     );
   }
 
-  Widget _buildMvpBadge() {
-    return Column(
-      children: [
-        const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-          decoration: BoxDecoration(
-            color: AppColors.gold.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: AppColors.gold.withValues(alpha: 0.3)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.workspace_premium_rounded, color: AppColors.gold, size: 14),
-              const SizedBox(width: 6),
-              Text('🏆 MVP HOLDER', style: AppTextStyles.label.copyWith(color: AppColors.gold, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStatsOverview(UserModel user) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        _ProfileStat(label: 'XP', value: '${user.xp}', color: AppColors.purple, icon: Icons.stars_rounded),
-        _ProfileStat(label: 'WINS', value: '${user.wins}', color: AppColors.teal, icon: Icons.emoji_events_rounded),
-        _ProfileStat(label: 'COINS', value: '${user.coins}', color: AppColors.gold, icon: Icons.monetization_on_rounded),
-        _ProfileStat(label: 'STREAK', value: '${user.currentWinStreak}', color: AppColors.red, icon: Icons.whatshot_rounded),
-      ],
-    );
-  }
-
-  Widget _buildProgressSection(UserModel user) {
+  Widget _buildAnalyticsSection(UserModel user) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: AppColors.cardBg,
-        borderRadius: BorderRadius.circular(24),
+        color: AppColors.cardBg.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(32),
         border: Border.all(color: AppColors.surface),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 20, offset: const Offset(0, 10))],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          XpProgressBar(totalXp: user.xp),
-          if (user.rank != 'Legend' && user.rank != 'Unranked') ...[
-            const SizedBox(height: 20),
-            RankProgressBar(rank: user.rank, subRank: user.subRank, points: user.rankPoints),
-          ],
+          Text('PERFORMANCE ANALYTICS', style: AppTextStyles.label.copyWith(letterSpacing: 2, color: AppColors.gold, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 24),
+          
+          // Primary Stats Grid - Fixed AspectRatio for better fit
+          GridView.count(
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            mainAxisSpacing: 16,
+            crossAxisSpacing: 16,
+            childAspectRatio: 1.8, // Decreased from 2.1 to make items TALLER
+            children: [
+              _AnalyticsItem(label: 'TOTAL XP', value: '${user.xp}', color: AppColors.purple, icon: Icons.stars_rounded),
+              _AnalyticsItem(label: 'COINS', value: '${user.coins}', color: AppColors.gold, icon: Icons.monetization_on_rounded),
+              _AnalyticsItem(label: 'WINS', value: '${user.wins}', color: AppColors.teal, icon: Icons.emoji_events_rounded),
+              _AnalyticsItem(label: 'STREAK', value: '${user.currentWinStreak}', color: AppColors.red, icon: Icons.whatshot_rounded),
+            ],
+          ),
+
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: Divider(color: AppColors.surface, height: 1),
+          ),
+
+          // Secondary Stats Row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _ProfileStatItem(label: 'MATCHES', value: '${user.matchesPlayed}'),
+              _ProfileStatItem(label: 'WIN RATE', value: '${user.winRate.toStringAsFixed(1)}%'),
+              _ProfileStatItem(label: 'DRAWS', value: '${user.draws}'),
+            ],
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildDetailedStats(UserModel user) {
+  Widget _buildSupportSection() {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: AppColors.cardBg,
+        color: AppColors.cardBg.withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: AppColors.surface),
       ),
       child: Column(
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _ProfileStatItem(label: 'MATCHES', value: '${user.matchesPlayed}'),
-              _ProfileStatItem(label: 'WIN RATE', value: '${user.winRate.toStringAsFixed(0)}%'),
-              _ProfileStatItem(label: 'LEVEL', value: '${user.level}'),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: AppColors.neonPink.withValues(alpha: 0.1), shape: BoxShape.circle),
+                child: const Icon(Icons.help_center_rounded, color: AppColors.neonPink, size: 24),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('NEED ASSISTANCE?', style: AppTextStyles.headline.copyWith(fontSize: 16)),
+                    Text('Contact our development team', style: AppTextStyles.label.copyWith(fontSize: 10, color: AppColors.textSecondary)),
+                  ],
+                ),
+              ),
             ],
           ),
-          const Padding(padding: EdgeInsets.symmetric(vertical: 20), child: Divider(color: AppColors.surface, height: 1)),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _ProfileStatItem(label: 'LOSSES', value: '${user.losses}'),
-              _ProfileStatItem(label: 'DRAWS', value: '${user.draws}'),
-              _ProfileStatItem(label: 'BEST STREAK', value: '${user.highestWinStreak}'),
-            ],
+          const SizedBox(height: 24),
+          _SupportButton(
+            icon: Icons.bug_report_rounded,
+            label: 'REPORT AN ISSUE',
+            color: AppColors.neonPink,
+            onTap: _reportIssue,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Email: imaginati.appdev@gmail.com',
+            style: AppTextStyles.label.copyWith(fontSize: 10, color: AppColors.textMuted),
           ),
         ],
       ),
@@ -287,22 +281,49 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with SingleTickerProvid
   }
 }
 
-class _ProfileStat extends StatelessWidget {
+class _AnalyticsItem extends StatelessWidget {
   final String label;
   final String value;
   final Color color;
   final IconData icon;
-  const _ProfileStat({required this.label, required this.value, required this.color, required this.icon});
+  const _AnalyticsItem({required this.label, required this.value, required this.color, required this.icon});
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Icon(icon, color: color, size: 24),
-        const SizedBox(height: 8),
-        Text(value, style: AppTextStyles.headline.copyWith(fontSize: 18, color: Colors.white)),
-        Text(label, style: AppTextStyles.label.copyWith(fontSize: 10, color: AppColors.textSecondary)),
-      ],
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color, size: 14),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  label, 
+                  style: AppTextStyles.label.copyWith(fontSize: 8, color: AppColors.textSecondary, fontWeight: FontWeight.bold),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Expanded(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(value, style: AppTextStyles.headline.copyWith(fontSize: 22, color: Colors.white)),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -316,9 +337,9 @@ class _ProfileStatItem extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Text(value, style: AppTextStyles.headline.copyWith(fontSize: 20)),
+        Text(value, style: AppTextStyles.headline.copyWith(fontSize: 16)),
         const SizedBox(height: 4),
-        Text(label, style: AppTextStyles.label.copyWith(fontSize: 9, color: AppColors.textSecondary, fontWeight: FontWeight.bold)),
+        Text(label, style: AppTextStyles.label.copyWith(fontSize: 8, color: AppColors.textSecondary, fontWeight: FontWeight.bold)),
       ],
     );
   }
@@ -335,15 +356,19 @@ class _SupportButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          border: Border.all(color: color.withValues(alpha: 0.5)),
+          borderRadius: BorderRadius.circular(16),
+        ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(icon, color: color, size: 18),
             const SizedBox(width: 12),
-            Text(label, style: AppTextStyles.label.copyWith(color: color, fontWeight: FontWeight.bold)),
+            Text(label, style: AppTextStyles.label.copyWith(color: color, fontWeight: FontWeight.w900, letterSpacing: 1)),
           ],
         ),
       ),
@@ -364,6 +389,7 @@ class _FriendRequestsSection extends ConsumerWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const SizedBox(height: 32),
             const Text('FRIEND REQUESTS', style: TextStyle(color: AppColors.textMuted, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 2)),
             const SizedBox(height: 16),
             ListView.builder(
@@ -411,7 +437,6 @@ class _FriendRequestsSection extends ConsumerWidget {
                 );
               },
             ),
-            const SizedBox(height: 20),
           ],
         );
       },
@@ -470,6 +495,7 @@ class _FriendsListSection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        const SizedBox(height: 32),
         const Text('FRIENDS', style: TextStyle(color: AppColors.textMuted, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 2)),
         const SizedBox(height: 16),
         friendsAsync.when(
@@ -478,12 +504,12 @@ class _FriendsListSection extends ConsumerWidget {
           data: (friends) {
             if (friends.isEmpty) {
               return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 20),
-                child: Text('You haven\'t added any friends yet.', style: AppTextStyles.bodyMd.copyWith(color: AppColors.textMuted)),
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                child: Text('You haven\'t added any friends yet.', style: AppTextStyles.bodyMd.copyWith(color: AppColors.textMuted, fontSize: 12)),
               );
             }
             return SizedBox(
-              height: 120,
+              height: 100,
               child: ListView.builder(
                 scrollDirection: Axis.horizontal,
                 itemCount: friends.length,
@@ -492,22 +518,20 @@ class _FriendsListSection extends ConsumerWidget {
                   return GestureDetector(
                     onTap: () => _showFriendProfile(context, ref, friend),
                     child: Container(
-                      width: 100,
+                      width: 80,
                       margin: const EdgeInsets.only(right: 12),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: AppColors.cardBg,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: AppColors.surface),
-                      ),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          SmartAvatar(avatarUrl: friend.avatarUrl, size: 40),
+                          SmartAvatar(avatarUrl: friend.avatarUrl, size: 50),
                           const SizedBox(height: 8),
-                          Text(friend.username, style: AppTextStyles.bodyMd.copyWith(fontSize: 12, fontWeight: FontWeight.bold),
-                            maxLines: 1, overflow: TextOverflow.ellipsis),
-                          Text('LVL ${friend.level}', style: AppTextStyles.label.copyWith(fontSize: 9, color: AppColors.gold)),
+                          Text(
+                            friend.username,
+                            style: AppTextStyles.bodyMd.copyWith(fontSize: 10, fontWeight: FontWeight.bold),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                          ),
                         ],
                       ),
                     ),
