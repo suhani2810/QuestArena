@@ -39,14 +39,14 @@ class LeaderboardRepository {
   }
 
   int _compareByPlayerStanding(LeaderboardModel a, LeaderboardModel b) {
-    final winsCompare = b.wins.compareTo(a.wins);
-    if (winsCompare != 0) return winsCompare;
-
     final levelCompare = b.level.compareTo(a.level);
     if (levelCompare != 0) return levelCompare;
 
     final rankCompare = b.rankStrength.compareTo(a.rankStrength);
     if (rankCompare != 0) return rankCompare;
+
+    final winsCompare = b.wins.compareTo(a.wins);
+    if (winsCompare != 0) return winsCompare;
 
     final eloCompare = b.eloRating.compareTo(a.eloRating);
     if (eloCompare != 0) return eloCompare;
