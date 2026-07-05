@@ -14,13 +14,15 @@ class GameRoomModel {
   final DateTime? questionStartedAt;
   final String? winnerId;
   final List<String> claimedRewards;
+  final String? player1Emoji;
+  final String? player2Emoji;
   final List<String> rematchRequests;
   final String? nextMatchId;
   final int? categoryId;
   final String categoryName;
   final bool isRanked;
   final Map<String, dynamic> powerups;
-  
+
   // Arena Breaker Fields
   final bool isArenaBreaker;
   final int arenaBreakerRound;
@@ -45,6 +47,8 @@ class GameRoomModel {
     this.questionStartedAt,
     this.winnerId,
     this.claimedRewards = const [],
+    this.player1Emoji,
+    this.player2Emoji,
     this.rematchRequests = const [],
     this.nextMatchId,
     this.categoryId,
@@ -63,6 +67,14 @@ class GameRoomModel {
   });
 
   factory GameRoomModel.fromJson(Map<String, dynamic> json) {
+    DateTime? parseDate(dynamic val) {
+      if (val == null) return null;
+      if (val is Timestamp) return val.toDate();
+      if (val is String) return DateTime.tryParse(val);
+      if (val is int) return DateTime.fromMillisecondsSinceEpoch(val);
+      return null;
+    }
+
     return GameRoomModel(
       roomId: json['roomId'] ?? '',
       roomCode: json['roomCode'] ?? '',
@@ -71,13 +83,11 @@ class GameRoomModel {
       player2: json['player2'] != null ? Map<String, dynamic>.from(json['player2']) : null,
       questions: List<dynamic>.from(json['questions'] ?? []),
       currentQuestionIndex: json['currentQuestionIndex'] ?? 0,
-      questionStartedAt: json['questionStartedAt'] != null 
-          ? (json['questionStartedAt'] is Timestamp 
-              ? (json['questionStartedAt'] as Timestamp).toDate() 
-              : DateTime.tryParse(json['questionStartedAt'].toString()))
-          : null,
+      questionStartedAt: parseDate(json['questionStartedAt']),
       winnerId: json['winnerId'],
       claimedRewards: List<String>.from(json['claimedRewards'] ?? []),
+      player1Emoji: json['player1Emoji'],
+      player2Emoji: json['player2Emoji'],
       rematchRequests: List<String>.from(json['rematchRequests'] ?? []),
       nextMatchId: json['nextMatchId'],
       categoryId: json['categoryId'],
@@ -86,7 +96,9 @@ class GameRoomModel {
       powerups: Map<String, dynamic>.from(json['powerups'] ?? {}),
       isArenaBreaker: json['isArenaBreaker'] ?? false,
       arenaBreakerRound: json['arenaBreakerRound'] ?? 0,
-      arenaBreakerQuestion: json['arenaBreakerQuestion'],
+      arenaBreakerQuestion: json['arenaBreakerQuestion'] != null 
+          ? Map<String, dynamic>.from(json['arenaBreakerQuestion']) 
+          : null,
       arenaBreakerSubmissions: Map<String, dynamic>.from(json['arenaBreakerSubmissions'] ?? {}),
       isArenaBreakerWin: json['isArenaBreakerWin'] ?? false,
       arenaBreakerStatusMessage: json['arenaBreakerStatusMessage'],
@@ -107,6 +119,8 @@ class GameRoomModel {
     'questionStartedAt': questionStartedAt != null ? Timestamp.fromDate(questionStartedAt!) : null,
     'winnerId': winnerId,
     'claimedRewards': claimedRewards,
+    'player1Emoji': player1Emoji,
+    'player2Emoji': player2Emoji,
     'rematchRequests': rematchRequests,
     'nextMatchId': nextMatchId,
     'categoryId': categoryId,
@@ -139,6 +153,11 @@ class GameRoomModel {
     bool? isArenaBreakerWin,
     Map<String, dynamic>? powerups,
     String? guildBattleId,
+    String? player1Emoji,
+    String? player2Emoji,
+    List<String>? rematchRequests,
+    String? nextMatchId,
+    String? forfeitWinnerId,
   }) {
     return GameRoomModel(
       roomId: roomId,
@@ -151,8 +170,10 @@ class GameRoomModel {
       questionStartedAt: questionStartedAt ?? this.questionStartedAt,
       winnerId: winnerId ?? this.winnerId,
       claimedRewards: claimedRewards,
-      rematchRequests: rematchRequests,
-      nextMatchId: nextMatchId,
+      player1Emoji: player1Emoji ?? this.player1Emoji,
+      player2Emoji: player2Emoji ?? this.player2Emoji,
+      rematchRequests: rematchRequests ?? this.rematchRequests,
+      nextMatchId: nextMatchId ?? this.nextMatchId,
       categoryId: categoryId,
       categoryName: categoryName,
       isRanked: isRanked ?? this.isRanked,
@@ -164,8 +185,7 @@ class GameRoomModel {
       isArenaBreakerWin: isArenaBreakerWin ?? this.isArenaBreakerWin,
       arenaBreakerStatusMessage: arenaBreakerStatusMessage,
       presence: presence,
-      forfeitWinnerId: forfeitWinnerId,
-      guildBattleId: guildBattleId ?? this.guildBattleId,
+      forfeitWinnerId: forfeitWinnerId ?? this.forfeitWinnerId,
     );
   }
 }
