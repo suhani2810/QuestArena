@@ -29,6 +29,7 @@ dependencies:
   # Networking & Images
   dio: ^5.4.0
   cached_network_image: ^3.3.0
+  image_picker: ^1.0.7
 
   # UI & Animations
   flutter_animate: ^4.5.0
