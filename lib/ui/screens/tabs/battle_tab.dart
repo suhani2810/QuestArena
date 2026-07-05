@@ -110,7 +110,8 @@ class _BattleTabState extends ConsumerState<BattleTab> {
       body: NeonSwirlBackground(
         colors: const [AppColors.neonViolet, AppColors.neonCyan],
         child: SafeArea(
-          child: Padding(
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.all(24.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -185,6 +186,9 @@ class _BattleTabState extends ConsumerState<BattleTab> {
                   color: AppColors.neonPink,
                   onTap: _handleGuildsTap,
                 ),
+                
+                // Extra spacing at bottom to ensure last card isn't cut off by bottom nav
+                const SizedBox(height: 20),
               ],
             ),
           ),
