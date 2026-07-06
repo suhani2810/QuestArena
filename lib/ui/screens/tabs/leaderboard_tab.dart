@@ -8,6 +8,7 @@ import '../../../data/models/user_model.dart';
 import '../../../providers/leaderboard_providers.dart';
 import '../../../providers/user_providers.dart';
 import '../../../core/utils/rank_system.dart';
+import 'dart:math' as math;
 import '../../widgets/smart_avatar.dart';
 import '../../widgets/player_profile_dialog.dart';
 
@@ -280,6 +281,6 @@ class _LeaderboardItem extends StatelessWidget {
           ],
         ),
       ),
-    ).animate().fadeIn(delay: (rank * 50).ms).slideX(begin: 0.1, end: 0);
+    ).animate().fadeIn(delay: (math.min(rank, 10) * 50).ms).slideX(begin: 0.1, end: 0);
   }
 }

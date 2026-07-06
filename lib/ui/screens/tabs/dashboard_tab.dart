@@ -204,9 +204,9 @@ class _WeeklyQuestsGrid extends ConsumerWidget {
           physics: const NeverScrollableScrollPhysics(),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 3,
-            crossAxisSpacing: 8,
-            mainAxisSpacing: 8,
-            childAspectRatio: 1.1,
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
+            childAspectRatio: 0.85, // Optimized for "pixel perfect" fit on smaller devices
           ),
           itemCount: 6,
           itemBuilder: (context, index) {

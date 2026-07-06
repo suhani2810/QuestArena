@@ -16,11 +16,6 @@ import '../guild/guild_home_screen.dart';
 import '../guild/guild_dialogs.dart';
 import '../avatar_selection_screen.dart';
 import '../border_selection_screen.dart';
-import '../../../providers/achievement_providers.dart';
-import '../../../data/models/achievement_model.dart';
-import '../../../providers/avatar_providers.dart';
-import '../../../providers/border_providers.dart';
-import '../../../core/errors/result.dart';
 
 class ProfileTab extends ConsumerStatefulWidget {
   const ProfileTab({super.key});
@@ -33,7 +28,6 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with SingleTickerProvid
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
-  bool _isSyncing = false;
 
   @override
   void initState() {
@@ -143,7 +137,7 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with SingleTickerProvid
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.purple,
                         padding: const EdgeInsets.symmetric(vertical: 18),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)), // Changed to 24 for pixel-perfect consistency
                         elevation: 4,
                         shadowColor: AppColors.purple.withValues(alpha: 0.5),
                       ),
@@ -155,8 +149,6 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with SingleTickerProvid
 
                   const SizedBox(height: 32),
                   _buildAnalyticsGrid(user),
-                  const SizedBox(height: 32),
-                  _buildAchievementsSection(user.uid),
                   const SizedBox(height: 32),
                   _ProfileGuildSection(user: user),
                   const SizedBox(height: 32),
@@ -223,7 +215,7 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with SingleTickerProvid
             physics: const NeverScrollableScrollPhysics(),
             mainAxisSpacing: 16,
             crossAxisSpacing: 16,
-            childAspectRatio: 1.7,
+            childAspectRatio: 1.05, // Further reduced from 1.15 to ensure absolute pixel-perfect safety
             children: [
               _StatItem(icon: Icons.military_tech_rounded, label: 'LEVEL', value: '${user.level}', color: AppColors.purple),
               _StatItem(icon: Icons.stars_rounded, label: 'TOTAL XP', value: '${user.xp}', color: AppColors.neonViolet),
@@ -237,95 +229,14 @@ class _ProfileTabState extends ConsumerState<ProfileTab> with SingleTickerProvid
           const Divider(color: AppColors.surface, height: 1),
           const SizedBox(height: 24),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _SimpleStat(label: 'MATCHES', value: '${user.matchesPlayed}'),
-              _SimpleStat(label: 'WIN RATE', value: '${user.winRate.toStringAsFixed(1)}%'),
-              _SimpleStat(label: 'AB WINS', value: '${user.arenaBreakerWins}'),
+              Expanded(child: _SimpleStat(label: 'MATCHES', value: '${user.matchesPlayed}')),
+              Expanded(child: _SimpleStat(label: 'WIN RATE', value: '${user.winRate.toStringAsFixed(1)}%')),
+              Expanded(child: _SimpleStat(label: 'AB WINS', value: '${user.arenaBreakerWins}')),
             ],
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildAchievementsSection(String uid) {
-    final achievementsAsync = ref.watch(userAchievementsProvider);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text('ACHIEVEMENTS', style: AppTextStyles.label.copyWith(color: AppColors.gold, fontWeight: FontWeight.w900, letterSpacing: 2)),
-            TextButton.icon(
-              onPressed: _isSyncing ? null : () async {
-                setState(() => _isSyncing = true);
-                try {
-                  // 1. Force refresh user profile from server first
-                  final userRepo = ref.read(userRepositoryProvider);
-                  final auth = ref.read(authStateProvider).value;
-                  if (auth == null) return;
-                  
-                  final userResult = await userRepo.getUserProfile(auth.uid);
-                  if (userResult is Success<UserModel>) {
-                    final freshUser = userResult.data;
-                    
-                    // 2. Run sync with fresh data
-                    await ref.read(achievementServiceProvider).syncAll(freshUser);
-                    
-                    // 3. Sync Avatars & Borders as well
-                    await ref.read(avatarServiceProvider).checkAndUnlockLeagues(freshUser.uid, freshUser.rank);
-                    await ref.read(borderServiceProvider).checkAndUnlockLeagues(freshUser.uid, freshUser.rank);
-                    
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Achievements Synced! Check your list. 🔥'),
-                          backgroundColor: AppColors.teal,
-                          duration: Duration(seconds: 2),
-                        ),
-                      );
-                    }
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Sync failed: $e'), backgroundColor: AppColors.red),
-                    );
-                  }
-                } finally {
-                  if (mounted) setState(() => _isSyncing = false);
-                }
-              },
-              icon: _isSyncing 
-                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.gold))
-                : const Icon(Icons.sync_rounded, size: 16, color: AppColors.gold),
-              label: Text(
-                _isSyncing ? 'SYNCING...' : 'SYNC', 
-                style: AppTextStyles.label.copyWith(color: AppColors.gold, fontSize: 10),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        achievementsAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, s) => Text('Error: $e', style: const TextStyle(color: Colors.red)),
-          data: (achievements) {
-            return ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: achievements.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
-              itemBuilder: (context, index) {
-                return _AchievementTile(achievement: achievements[index], uid: uid);
-              },
-            );
-          },
-        ),
-      ],
     );
   }
 
@@ -688,10 +599,28 @@ class _StatItem extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, color: color, size: 24),
-          const SizedBox(height: 8),
-          Text(value, style: AppTextStyles.headline.copyWith(fontSize: 18, color: color)),
-          Text(label, style: AppTextStyles.label.copyWith(fontSize: 9, color: AppColors.textSecondary, fontWeight: FontWeight.bold)),
+          Icon(icon, color: color, size: 22),
+          const SizedBox(height: 4),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value,
+              style: AppTextStyles.headline.copyWith(fontSize: 18, color: color),
+            ),
+          ),
+          const SizedBox(height: 2),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              label,
+              style: AppTextStyles.label.copyWith(
+                fontSize: 9,
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
         ],
       ),
     );
@@ -738,206 +667,6 @@ class _CustomizationCard extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-class _AchievementTile extends ConsumerWidget {
-  final Achievement achievement;
-  final String uid;
-
-  const _AchievementTile({required this.achievement, required this.uid});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final bool isUnlocked = achievement.isUnlocked;
-    final bool isClaimed = achievement.isClaimed;
-    final double progressPercent = (achievement.progress / achievement.target).clamp(0.0, 1.0);
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isUnlocked ? AppColors.cardBg : AppColors.cardBg.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: isClaimed 
-              ? Colors.green.withValues(alpha: 0.5) 
-              : (isUnlocked ? AppColors.gold : AppColors.surface),
-          width: isUnlocked ? 2 : 1,
-        ),
-        boxShadow: isUnlocked && !isClaimed ? [
-          BoxShadow(
-            color: AppColors.gold.withValues(alpha: 0.2),
-            blurRadius: 10,
-            spreadRadius: 1,
-          )
-        ] : null,
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: isUnlocked ? AppColors.gold.withValues(alpha: 0.1) : Colors.black12,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  _getIcon(achievement.type),
-                  color: isUnlocked ? AppColors.gold : AppColors.textMuted,
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      achievement.title,
-                      style: AppTextStyles.bodyMd.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: isUnlocked ? Colors.white : AppColors.textMuted,
-                      ),
-                    ),
-                    Text(
-                      achievement.description,
-                      style: AppTextStyles.label.copyWith(fontSize: 11, color: AppColors.textSecondary),
-                    ),
-                  ],
-                ),
-              ),
-              if (isClaimed)
-                _buildStatusBadge('CLAIMED', Colors.green)
-              else if (isUnlocked)
-                _buildClaimButton(context, ref)
-              else
-                _buildStatusBadge('LOCKED', AppColors.textMuted),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: progressPercent,
-                    backgroundColor: AppColors.surface,
-                    color: isUnlocked ? AppColors.gold : AppColors.purple,
-                    minHeight: 6,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                '${achievement.progress}/${achievement.target}',
-                style: AppTextStyles.label.copyWith(fontSize: 10, fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          _buildRewardsInfo(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRewardsInfo() {
-    final reward = achievement.reward;
-    List<Widget> rewards = [];
-
-    if (reward.coins > 0) {
-      rewards.add(_rewardItem(Icons.monetization_on_rounded, '${reward.coins}', AppColors.gold));
-    }
-    if (reward.xp > 0) {
-      rewards.add(_rewardItem(Icons.stars_rounded, '${reward.xp} XP', AppColors.purple));
-    }
-    if (reward.avatarId != null) {
-      rewards.add(_rewardItem(Icons.person_rounded, 'AVATAR', AppColors.neonCyan));
-    }
-    if (reward.borderId != null) {
-      rewards.add(_rewardItem(Icons.verified_user_rounded, 'BORDER', AppColors.gold));
-    }
-
-    return Row(
-      children: [
-        Text('REWARD: ', style: AppTextStyles.label.copyWith(fontSize: 9, color: AppColors.textMuted)),
-        ...rewards.expand((w) => [w, const SizedBox(width: 8)]).toList()..removeLast(),
-      ],
-    );
-  }
-
-  Widget _rewardItem(IconData icon, String text, Color color) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 12, color: color),
-        const SizedBox(width: 4),
-        Text(text, style: AppTextStyles.label.copyWith(fontSize: 10, color: color, fontWeight: FontWeight.bold)),
-      ],
-    );
-  }
-
-  Widget _buildStatusBadge(String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withValues(alpha: 0.5)),
-      ),
-      child: Text(label, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold)),
-    );
-  }
-
-  Widget _buildClaimButton(BuildContext context, WidgetRef ref) {
-    return SizedBox(
-      height: 32,
-      child: ElevatedButton(
-        onPressed: () async {
-          final result = await ref.read(achievementServiceProvider).claimReward(uid, achievement.id);
-          if (result is Failure && context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Failed to claim: ${result.error.message}'), backgroundColor: AppColors.red),
-            );
-          }
-        },
-        style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.gold,
-          foregroundColor: Colors.black,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-        ),
-        child: const Text('CLAIM'),
-      ),
-    );
-  }
-
-  IconData _getIcon(AchievementType type) {
-    switch (type) {
-      case AchievementType.matchesPlayed:
-        return Icons.sports_esports_rounded;
-      case AchievementType.matchesWon:
-        return Icons.emoji_events_rounded;
-      case AchievementType.questionsCorrect:
-        return Icons.psychology_rounded;
-      case AchievementType.perfectScores:
-        return Icons.star_rounded;
-      case AchievementType.loginStreak:
-        return Icons.whatshot_rounded;
-      case AchievementType.rankReached:
-        return Icons.workspace_premium_rounded;
-      case AchievementType.winStreak:
-        return Icons.flash_on_rounded;
-      case AchievementType.levelReached:
-        return Icons.military_tech_rounded;
-      case AchievementType.accuracy:
-        return Icons.my_location_rounded;
-      case AchievementType.arenaBreakerWins:
-        return Icons.shield_rounded;
-    }
   }
 }
 

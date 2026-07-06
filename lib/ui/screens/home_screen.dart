@@ -14,6 +14,7 @@ import 'tabs/dashboard_tab.dart';
 import 'tabs/battle_tab.dart';
 import 'tabs/leaderboard_tab.dart';
 import 'tabs/profile_tab.dart';
+import 'achievements_screen.dart';
 import '../widgets/streak_reward_popup.dart';
 import '../widgets/achievement_popup.dart';
 import '../widgets/unlock_popup.dart';
@@ -35,6 +36,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   final List<Widget> _tabs = [
     const DashboardTab(),
     const BattleTab(),
+    const AchievementsScreen(),
     const LeaderboardTab(),
     const ProfileTab(),
   ];
@@ -199,7 +201,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           border: Border(top: BorderSide(color: AppColors.divider.withValues(alpha: 0.5), width: 0.5)),
         ),
         child: NavigationBar(
-          height: 65,
+          height: 72, // Increased from 65 for better "pixel perfect" spacing
           elevation: 0,
           backgroundColor: AppColors.bgBase,
           selectedIndex: selectedIndex,
@@ -209,8 +211,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           destinations: [
             _buildNavItem(0, Icons.dashboard_rounded, Icons.dashboard_outlined, 'HUB'),
             _buildNavItem(1, Icons.bolt_rounded, Icons.bolt_outlined, 'BATTLE'),
-            _buildNavItem(2, Icons.leaderboard_rounded, Icons.leaderboard_outlined, 'RANKS'),
-            _buildNavItem(3, Icons.person_rounded, Icons.person_outlined, 'PROFILE'),
+            _buildNavItem(2, Icons.emoji_events_rounded, Icons.emoji_events_outlined, 'TROPHIES'),
+            _buildNavItem(3, Icons.leaderboard_rounded, Icons.leaderboard_outlined, 'RANKS'),
+            _buildNavItem(4, Icons.person_rounded, Icons.person_outlined, 'PROFILE'),
           ],
         ),
       ),
