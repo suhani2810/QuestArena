@@ -23,13 +23,16 @@ class GameScreen extends ConsumerStatefulWidget {
 }
 
 class _GameScreenState extends ConsumerState<GameScreen>
-    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   late AnimationController _timerController;
+  late AnimationController _momentumController;
   String? _selectedAnswer;
   bool _hasAnswered = false;
   List<String> _shuffledOptions = [];
   final List<String> _hiddenOptions = [];
   int _lastQuestionIndex = -1;
+  String? _currentMomentumLabel;
+  Timer? _momentumTimer;
 
   bool _isTimeFrozen = false;
   bool _usedFiftyFiftyInMatch = false;
@@ -61,6 +64,11 @@ class _GameScreenState extends ConsumerState<GameScreen>
       duration: const Duration(seconds: 15),
     );
 
+    _momentumController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
+
     _syncTimer = Timer.periodic(const Duration(seconds: 1), (_) => _syncState());
   }
 
@@ -70,8 +78,10 @@ class _GameScreenState extends ConsumerState<GameScreen>
     _heartbeatTimer?.cancel();
     _syncTimer?.cancel();
     _forfeitTimer?.cancel();
+    _momentumTimer?.cancel();
     _updatePresence(false);
     _timerController.dispose();
+    _momentumController.dispose();
     super.dispose();
   }
 
@@ -358,6 +368,45 @@ class _GameScreenState extends ConsumerState<GameScreen>
     }
   }
 
+  void _updateMomentum(GameRoomModel room) {
+    final user = ref.read(currentUserProvider).value;
+    if (user == null) return;
+
+    final isP1 = user.uid == room.player1['uid'];
+    final myScore = isP1 ? (room.player1['score'] ?? 0) : (room.player2?['score'] ?? 0);
+    final opScore = isP1 ? (room.player2?['score'] ?? 0) : (room.player1['score'] ?? 0);
+    final diff = myScore - opScore;
+
+    String newLabel;
+    if (room.currentQuestionIndex == 9 && myScore == opScore && myScore > 0) {
+      newLabel = "💥 Final Question Decides the Winner!";
+    } else if (diff >= 30) { // Assuming score increment is ~10-15 per question
+      newLabel = "🔥 Dominating the Match";
+    } else if (diff > 0) {
+      newLabel = "🟢 You're Leading";
+    } else if (diff == 0) {
+      newLabel = "⚔️ Neck and Neck";
+    } else if (diff > -30) {
+      newLabel = "🟠 Opponent is Leading";
+    } else {
+      newLabel = "🔴 Falling Behind";
+    }
+
+    if (newLabel != _currentMomentumLabel) {
+      setState(() {
+        _currentMomentumLabel = newLabel;
+      });
+      _momentumTimer?.cancel();
+      _momentumController.forward(from: 0);
+      
+      _momentumTimer = Timer(const Duration(milliseconds: 2500), () {
+        if (mounted) {
+          _momentumController.reverse();
+        }
+      });
+    }
+  }
+
   void _prepareOptions(GameRoomModel room) {
     if (room.status == 'arena_breaker') {
       final question = room.arenaBreakerQuestion;
@@ -448,6 +497,8 @@ class _GameScreenState extends ConsumerState<GameScreen>
     ref.listen<AsyncValue<GameRoomModel?>>(gameRoomProvider(widget.roomId), (prev, next) {
       final room = next.value;
       if (room == null) return;
+
+      _updateMomentum(room);
 
       if (room.status == 'finished') {
         _heartbeatTimer?.cancel();
@@ -552,6 +603,13 @@ class _GameScreenState extends ConsumerState<GameScreen>
           data: (room) {
             if (room == null) return const Center(child: Text('Room Error'));
 
+            // Trigger initial momentum
+            if (_currentMomentumLabel == null && room.status == 'active') {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) _updateMomentum(room);
+              });
+            }
+
             final isP1 = user.uid == room.player1['uid'];
             final opponentEmoji = isP1 ? room.player2Emoji : room.player1Emoji;
 
@@ -601,6 +659,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
           children: [
             const SizedBox(height: 16),
             _buildHeader(room),
+            _buildMomentumPill(),
             const SizedBox(height: 24),
             _buildTimerBar(),
             const SizedBox(height: 24),
@@ -777,6 +836,60 @@ class _GameScreenState extends ConsumerState<GameScreen>
     );
   }
 
+  Widget _buildMomentumPill() {
+    return AnimatedBuilder(
+      animation: _momentumController,
+      builder: (context, child) {
+        if (_currentMomentumLabel == null) return const SizedBox.shrink();
+        
+        return FadeTransition(
+          opacity: _momentumController,
+          child: SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0, -0.5),
+              end: Offset.zero,
+            ).animate(CurvedAnimation(
+              parent: _momentumController,
+              curve: Curves.easeOut,
+            )),
+            child: Container(
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.6),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: _currentMomentumLabel!.contains('Dominating') || _currentMomentumLabel!.contains('Winner')
+                      ? AppColors.neonPink.withValues(alpha: 0.5)
+                      : AppColors.neonCyan.withValues(alpha: 0.5),
+                  width: 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: (_currentMomentumLabel!.contains('Dominating') || _currentMomentumLabel!.contains('Winner')
+                        ? AppColors.neonPink
+                        : AppColors.neonCyan).withValues(alpha: 0.2),
+                    blurRadius: 10,
+                    spreadRadius: 1,
+                  ),
+                ],
+              ),
+              child: Text(
+                _currentMomentumLabel!,
+                style: AppTextStyles.label.copyWith(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.1,
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildTimerBar() {
     return RepaintBoundary(
       child: AnimatedBuilder(
@@ -856,6 +969,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
           children: [
             const SizedBox(height: 16),
             Text('⚔ SUDDEN DEATH ⚔', style: AppTextStyles.label.copyWith(color: AppColors.red)),
+            _buildMomentumPill(),
             const SizedBox(height: 24),
             _buildTimerBar(),
             const SizedBox(height: 24),
