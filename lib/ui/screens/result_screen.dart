@@ -135,6 +135,10 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
         opponentScore: opponentScore,
         xpEarned:
             result?.xpRewards.total ?? (isWinner ? 50 : (isDraw ? 25 : 15)),
+        rpChange: result?.rankUpdate.pointsGained ?? 0,
+        matchType: widget.room.isRanked ? 'ranked' : 'private_duel',
+        categoryName: widget.room.categoryName,
+        durationSeconds: 0,
         timestamp: DateTime.now(),
       );
 
