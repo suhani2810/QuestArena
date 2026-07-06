@@ -34,12 +34,10 @@ class FriendsRepository {
 
     final batch = _db.batch();
 
-    // 1. Update request status
-    batch.update(_db.collection('friendRequests').doc(requestId),
-        {'status': 'accepted'});
+    // 1. Remove the request
+    batch.delete(_db.collection('friendRequests').doc(requestId));
 
     // 2. Add to both users' friends subcollection
-    // We'll fetch full user details to populate the friends doc for quick display
     final senderDoc = await _db.collection('users').doc(senderUid).get();
     final receiverDoc = await _db.collection('users').doc(receiverUid).get();
 
@@ -60,7 +58,13 @@ class FriendsRepository {
             'level': senderData['level'],
             'rank': senderData['rank'],
             'subRank': senderData['subRank'],
+            'rankPoints': senderData['rankPoints'],
             'xp': senderData['xp'],
+            'wins': senderData['wins'],
+            'losses': senderData['losses'],
+            'draws': senderData['draws'],
+            'eloRating': senderData['eloRating'],
+            'selectedBorder': senderData['selectedBorder'],
             'addedAt': FieldValue.serverTimestamp(),
           });
 
@@ -77,7 +81,13 @@ class FriendsRepository {
             'level': receiverData['level'],
             'rank': receiverData['rank'],
             'subRank': receiverData['subRank'],
+            'rankPoints': receiverData['rankPoints'],
             'xp': receiverData['xp'],
+            'wins': receiverData['wins'],
+            'losses': receiverData['losses'],
+            'draws': receiverData['draws'],
+            'eloRating': receiverData['eloRating'],
+            'selectedBorder': receiverData['selectedBorder'],
             'addedAt': FieldValue.serverTimestamp(),
           });
     }
@@ -87,10 +97,7 @@ class FriendsRepository {
 
   // Reject a friend request
   Future<void> rejectFriendRequest(String requestId) async {
-    await _db
-        .collection('friendRequests')
-        .doc(requestId)
-        .update({'status': 'rejected'});
+    await _db.collection('friendRequests').doc(requestId).delete();
   }
 
   // Remove a friend
@@ -137,6 +144,30 @@ class FriendsRepository {
         .collection('users')
         .doc(uid)
         .collection('friends')
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => LeaderboardModel.fromJson(doc.data()))
+            .toList());
+  }
+
+  // Real-time listener for friends list UIDs
+  Stream<List<String>> watchFriendUids(String uid) {
+    return _db
+        .collection('users')
+        .doc(uid)
+        .collection('friends')
+        .snapshots()
+        .map((snapshot) => snapshot.docs.map((doc) => doc.id).toList());
+  }
+
+  // Real-time listener for friends list (Live from users collection)
+  Stream<List<LeaderboardModel>> watchFriendsLive(List<String> uids) {
+    if (uids.isEmpty) return Stream.value([]);
+
+    // Firestore whereIn has a limit of 30.
+    return _db
+        .collection('users')
+        .where(FieldPath.documentId, whereIn: uids.take(30).toList())
         .snapshots()
         .map((snapshot) => snapshot.docs
             .map((doc) => LeaderboardModel.fromJson(doc.data()))

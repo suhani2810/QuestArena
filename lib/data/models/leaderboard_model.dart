@@ -17,6 +17,7 @@ class LeaderboardModel {
   final int currentWinStreak;
   final double averageAccuracy;
   final int eloRating;
+  final String? selectedBorder;
 
   LeaderboardModel({
     required this.uid,
@@ -33,6 +34,7 @@ class LeaderboardModel {
     this.currentWinStreak = 0,
     this.averageAccuracy = 0.0,
     this.eloRating = 1200,
+    this.selectedBorder,
   });
 
   // Calculated values
@@ -83,6 +85,7 @@ class LeaderboardModel {
       currentWinStreak: json['currentWinStreak'] ?? json['currentStreak'] ?? 0,
       averageAccuracy: (json['averageAccuracy'] ?? 0).toDouble(),
       eloRating: json['eloRating'] ?? 1200,
+      selectedBorder: json['selectedBorder'],
     );
   }
 
@@ -101,5 +104,6 @@ class LeaderboardModel {
         'currentWinStreak': currentWinStreak,
         'averageAccuracy': averageAccuracy,
         'eloRating': eloRating,
+        'selectedBorder': selectedBorder,
       };
 }
