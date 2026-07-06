@@ -746,6 +746,7 @@ class _VictoryCardModalState extends State<_VictoryCardModal> {
       const shareMessage =
           "I just won a battle on QuestArena!🏆\n\nThink you can beat me? 🧠\nChallenge me and prove it.\n\n🎮 Play now:\nhttps://quest-arena-self.vercel.app/";
 
+      // ignore: deprecated_member_use
       await Share.share(shareMessage);
     } catch (e) {
       debugPrint('Share Error: $e');

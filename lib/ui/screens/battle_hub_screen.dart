@@ -353,15 +353,15 @@ class _BattleModeCardState extends State<_BattleModeCard>
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: _isPressed ? c.withOpacity(0.08) : AppColors.bgCard,
+            color: _isPressed ? c.withValues(alpha: 0.08) : AppColors.bgCard,
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
-              color: _isPressed ? c.withOpacity(0.6) : c.withOpacity(0.25),
+              color: _isPressed ? c.withValues(alpha: 0.6) : c.withValues(alpha: 0.25),
               width: _isPressed ? 1.2 : 0.6,
             ),
             boxShadow: [
               BoxShadow(
-                  color: c.withOpacity(_isPressed ? 0.25 : 0.10),
+                  color: c.withValues(alpha: _isPressed ? 0.25 : 0.10),
                   blurRadius: _isPressed ? 24 : 12,
                   spreadRadius: _isPressed ? 2 : 0),
             ],
@@ -373,11 +373,11 @@ class _BattleModeCardState extends State<_BattleModeCard>
                 width: 52, height: 52,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: c.withOpacity(0.12),
-                  border: Border.all(color: c.withOpacity(0.5), width: 1),
+                  color: c.withValues(alpha: 0.12),
+                  border: Border.all(color: c.withValues(alpha: 0.5), width: 1),
                   boxShadow: [
-                    BoxShadow(color: c.withOpacity(0.3), blurRadius: 12),
-                    BoxShadow(color: c.withOpacity(0.1), blurRadius: 24),
+                    BoxShadow(color: c.withValues(alpha: 0.3), blurRadius: 12),
+                    BoxShadow(color: c.withValues(alpha: 0.1), blurRadius: 24),
                   ],
                 ),
                 child: Icon(widget.mode.icon, color: c, size: 26),
@@ -431,9 +431,9 @@ class _BattleModeCardState extends State<_BattleModeCard>
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
-                      color: c.withOpacity(0.10),
+                      color: c.withValues(alpha: 0.10),
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: c.withOpacity(0.3), width: 0.5),
+                      border: Border.all(color: c.withValues(alpha: 0.3), width: 0.5),
                     ),
                     child: Text(
                       widget.mode.tag,
@@ -447,7 +447,7 @@ class _BattleModeCardState extends State<_BattleModeCard>
                   ),
                   const SizedBox(height: 8),
                   Icon(Icons.chevron_right_rounded,
-                      color: c.withOpacity(0.5), size: 20),
+                      color: c.withValues(alpha: 0.5), size: 20),
                 ],
               ),
             ],
