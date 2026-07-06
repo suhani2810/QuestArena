@@ -209,7 +209,7 @@ class _WeeklyQuestsGrid extends ConsumerWidget {
             final quests = weeklyStatus[day] ?? [];
             final completed = quests.isNotEmpty && quests.every((q) => q.isCompleted);
             final isPast = day < today;
-            
+
             return _QuestCard(
               day: day,
               isToday: day == today,
@@ -223,20 +223,20 @@ class _WeeklyQuestsGrid extends ConsumerWidget {
         ),
         const SizedBox(height: 8),
         Builder(
-          builder: (context) {
-            final quests = weeklyStatus[7] ?? [];
-            final completed = quests.isNotEmpty && quests.every((q) => q.isCompleted);
-            return _QuestCard(
-              day: 7,
-              isToday: today == 7,
-              isCompleted: completed,
-              isPast: 7 < today,
-              isLocked: 7 > today,
-              isLarge: true,
-              countdown: 7 == nextDay ? countdownValue : null,
-              quests: quests,
-            );
-          }
+            builder: (context) {
+              final quests = weeklyStatus[7] ?? [];
+              final completed = quests.isNotEmpty && quests.every((q) => q.isCompleted);
+              return _QuestCard(
+                day: 7,
+                isToday: today == 7,
+                isCompleted: completed,
+                isPast: 7 < today,
+                isLocked: 7 > today,
+                isLarge: true,
+                countdown: 7 == nextDay ? countdownValue : null,
+                quests: quests,
+              );
+            }
         ),
       ],
     );
@@ -281,7 +281,7 @@ class _QuestCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final canOpen = isToday && !isCompleted;
     final isMissed = isPast && !isCompleted;
-    
+
     return GestureDetector(
       onTap: () {
         if (canOpen) {
@@ -294,13 +294,13 @@ class _QuestCard extends StatelessWidget {
         height: isLarge ? 72 : null,
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: isCompleted 
-              ? AppColors.teal.withValues(alpha: 0.1) 
+          color: isCompleted
+              ? AppColors.teal.withValues(alpha: 0.1)
               : (isMissed ? AppColors.red.withValues(alpha: 0.05) : (canOpen ? AppColors.purple.withValues(alpha: 0.2) : AppColors.cardBg.withValues(alpha: 0.5))),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isCompleted 
-                ? AppColors.teal.withValues(alpha: 0.5) 
+            color: isCompleted
+                ? AppColors.teal.withValues(alpha: 0.5)
                 : (isMissed ? AppColors.red.withValues(alpha: 0.3) : (canOpen ? AppColors.purple : AppColors.surface)),
             width: canOpen ? 2 : 1,
           ),
@@ -312,42 +312,42 @@ class _QuestCard extends StatelessWidget {
             )
           ] : null,
         ),
-        child: isLarge 
-          ? Row(
-              children: [
-                _buildIcon(isMissed),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(_dayName, style: AppTextStyles.headline.copyWith(fontSize: 13, color: isToday ? AppColors.gold : Colors.white)),
-                      Text(
-                        isCompleted ? 'Completed' : (isMissed ? 'Missed' : (isToday ? 'Tap to claim rewards' : (countdown != null ? 'Unlocks in $countdown' : 'Locked'))),
-                        style: AppTextStyles.label.copyWith(fontSize: 9, color: isCompleted ? AppColors.teal : (isMissed ? AppColors.red : (countdown != null ? AppColors.gold : AppColors.textMuted))),
-                      ),
-                    ],
+        child: isLarge
+            ? Row(
+          children: [
+            _buildIcon(isMissed),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(_dayName, style: AppTextStyles.headline.copyWith(fontSize: 13, color: isToday ? AppColors.gold : Colors.white)),
+                  Text(
+                    isCompleted ? 'Completed' : (isMissed ? 'Missed' : (isToday ? 'Tap to claim rewards' : (countdown != null ? 'Unlocks in $countdown' : 'Locked'))),
+                    style: AppTextStyles.label.copyWith(fontSize: 9, color: isCompleted ? AppColors.teal : (isMissed ? AppColors.red : (countdown != null ? AppColors.gold : AppColors.textMuted))),
                   ),
-                ),
-                if (canOpen) const Icon(Icons.arrow_forward_ios_rounded, color: AppColors.gold, size: 14),
-              ],
-            )
-          : Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(_dayName, style: AppTextStyles.label.copyWith(fontSize: 9, fontWeight: FontWeight.bold, color: isToday ? Colors.white : AppColors.textMuted)),
-                const SizedBox(height: 6),
-                _buildIcon(isMissed),
-                const SizedBox(height: 4),
-                if (isCompleted) 
-                  const Text('DONE', style: TextStyle(color: AppColors.teal, fontSize: 7, fontWeight: FontWeight.bold))
-                else if (isMissed)
-                  const Text('MISSED', style: TextStyle(color: AppColors.red, fontSize: 7, fontWeight: FontWeight.bold))
-                else if (countdown != null)
-                  Text(countdown!, style: const TextStyle(color: AppColors.gold, fontSize: 7, fontWeight: FontWeight.bold)),
-              ],
+                ],
+              ),
             ),
+            if (canOpen) const Icon(Icons.arrow_forward_ios_rounded, color: AppColors.gold, size: 14),
+          ],
+        )
+            : Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(_dayName, style: AppTextStyles.label.copyWith(fontSize: 9, fontWeight: FontWeight.bold, color: isToday ? Colors.white : AppColors.textMuted)),
+            const SizedBox(height: 6),
+            _buildIcon(isMissed),
+            const SizedBox(height: 4),
+            if (isCompleted)
+              const Text('DONE', style: TextStyle(color: AppColors.teal, fontSize: 7, fontWeight: FontWeight.bold))
+            else if (isMissed)
+              const Text('MISSED', style: TextStyle(color: AppColors.red, fontSize: 7, fontWeight: FontWeight.bold))
+            else if (countdown != null)
+                Text(countdown!, style: const TextStyle(color: AppColors.gold, fontSize: 7, fontWeight: FontWeight.bold)),
+          ],
+        ),
       ),
     ).animate(target: canOpen ? 1 : 0).shimmer(delay: 2.seconds, duration: 1.5.seconds);
   }
