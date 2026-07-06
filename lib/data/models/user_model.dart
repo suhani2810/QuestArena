@@ -48,6 +48,8 @@ class UserModel {
   final int weeklyXp;
   final int weeklyWins;
   final DateTime? lastDailyBonusDate;
+  final int totalQuestionsCorrect;
+  final int totalPerfectScores;
 
   UserModel({
     required this.uid,
@@ -93,6 +95,8 @@ class UserModel {
     this.weeklyXp = 0,
     this.weeklyWins = 0,
     this.lastDailyBonusDate,
+    this.totalQuestionsCorrect = 0,
+    this.totalPerfectScores = 0,
   })  : lastCoinResetDate = lastCoinResetDate ?? DateTime(2000, 1, 1),
         lastDailyLoginRewardDate = lastDailyLoginRewardDate ?? DateTime(2000, 1, 1),
         lastLoginDate = lastLoginDate ?? DateTime(2000, 1, 1);
@@ -165,6 +169,8 @@ class UserModel {
       weeklyXp: json['weeklyXp'] ?? 0,
       weeklyWins: json['weeklyWins'] ?? 0,
       lastDailyBonusDate: parseDate(json['lastDailyBonusDate']),
+      totalQuestionsCorrect: json['totalQuestionsCorrect'] ?? 0,
+      totalPerfectScores: json['totalPerfectScores'] ?? 0,
     );
   }
 
@@ -213,6 +219,8 @@ class UserModel {
         'weeklyWins': weeklyWins,
         'lastDailyBonusDate': lastDailyBonusDate != null ? Timestamp.fromDate(lastDailyBonusDate!) : null,
         'matchesPlayed': matchesPlayed,
+        'totalQuestionsCorrect': totalQuestionsCorrect,
+        'totalPerfectScores': totalPerfectScores,
       };
 
   UserModel copyWith({
@@ -259,6 +267,8 @@ class UserModel {
     bool clearGuildId = false,
     int? weeklyXp,
     int? weeklyWins,
+    int? totalQuestionsCorrect,
+    int? totalPerfectScores,
   }) {
     return UserModel(
       uid: uid,
@@ -304,6 +314,8 @@ class UserModel {
       guildId: clearGuildId ? null : (guildId ?? this.guildId),
       weeklyXp: weeklyXp ?? this.weeklyXp,
       weeklyWins: weeklyWins ?? this.weeklyWins,
+      totalQuestionsCorrect: totalQuestionsCorrect ?? this.totalQuestionsCorrect,
+      totalPerfectScores: totalPerfectScores ?? this.totalPerfectScores,
     );
   }
 }
