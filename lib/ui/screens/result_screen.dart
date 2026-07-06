@@ -21,7 +21,8 @@ import '../../../providers/guild_providers.dart';
 
 class ResultScreen extends ConsumerStatefulWidget {
   final GameRoomModel room;
-  const ResultScreen({super.key, required this.room});
+  final bool isPractice;
+  const ResultScreen({super.key, required this.room, this.isPractice = false});
 
   @override
   ConsumerState<ResultScreen> createState() => _ResultScreenState();
@@ -42,7 +43,11 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
       if (user != null && widget.room.winnerId == user.uid) {
         _confettiController.play();
       }
-      _handleRewards();
+      if (!widget.isPractice) {
+        _handleRewards();
+      } else {
+        setState(() => _rewardsClaimed = true);
+      }
     });
   }
 

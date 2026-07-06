@@ -6,6 +6,7 @@ import '../../../core/constants/text_styles.dart';
 import '../../../core/utils/game_utils.dart';
 import '../../../data/models/game_room_model.dart';
 import '../../../providers/user_providers.dart';
+import '../../../ui/screens/result_screen.dart';
 import '../models/practice_models.dart';
 import '../providers/practice_controller.dart';
 
@@ -360,5 +361,4 @@ class _AnswerButton extends StatelessWidget {
     );
   }
 }
-
 
