@@ -1,11 +1,10 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:confetti/confetti.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:screenshot/screenshot.dart';
-import 'package:path_provider/path_provider.dart';
 import '../../../core/constants/colors.dart';
 import '../../../core/constants/text_styles.dart';
 import '../../../providers/user_providers.dart';
@@ -179,17 +178,11 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
         context: context,
       );
 
-      final directory = await getTemporaryDirectory();
-      final imagePath = await File('${directory.path}/victory_card.png').create();
-      await imagePath.writeAsBytes(image);
-
       const shareMessage = "I just played a battle on QuestArena!🏆\n\nThink you can beat me? 🧠\nChallenge me and prove it.\n\n🎮 Play now:\nhttps://quest-arena-self.vercel.app/";
 
-      await SharePlus.instance.share(
-        ShareParams(
-          files: [XFile(imagePath.path)],
-          text: shareMessage,
-        ),
+      await Share.shareXFiles(
+        [XFile.fromData(image, name: 'victory_card.png', mimeType: 'image/png')],
+        text: shareMessage,
       );
     } catch (e) {
       if (mounted) {
