@@ -1,6 +1,6 @@
-import 'dart:io';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:flutter/foundation.dart';
 import '../../core/errors/app_error.dart';
 import '../../core/errors/result.dart';
 
@@ -9,7 +9,7 @@ class StorageService {
   final ImagePicker _picker = ImagePicker();
 
   /// Pick an image from gallery or camera
-  Future<Result<File>> pickImage(ImageSource source) async {
+  Future<Result<XFile>> pickImage(ImageSource source) async {
     try {
       final XFile? image = await _picker.pickImage(
         source: source,
@@ -19,7 +19,7 @@ class StorageService {
       );
       
       if (image != null) {
-        return Success(File(image.path));
+        return Success(image);
       }
       return const Failure(UnknownError("No image selected"));
     } catch (e) {
@@ -28,12 +28,18 @@ class StorageService {
   }
 
   /// Upload profile picture to Firebase Storage
-  Future<Result<String>> uploadProfilePicture(String uid, File file) async {
+  Future<Result<String>> uploadProfilePicture(String uid, XFile file) async {
     try {
       final ref = _storage.ref().child('avatars').child('$uid.jpg');
       
-      // Upload file
-      await ref.putFile(file);
+      if (kIsWeb) {
+        final bytes = await file.readAsBytes();
+        await ref.putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
+      } else {
+        // Fallback for native platforms (requires conditional import or using bytes for all)
+        final bytes = await file.readAsBytes();
+        await ref.putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
+      }
       
       // Get download URL
       final url = await ref.getDownloadURL();

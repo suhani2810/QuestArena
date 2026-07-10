@@ -38,19 +38,23 @@ class _NeonSwirlBackgroundState extends State<NeonSwirlBackground>
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        AnimatedBuilder(
-          animation: _controller,
-          builder: (context, _) {
-            return CustomPaint(
-              painter: _SwirlPainter(
-                colors: widget.colors,
-                progress: _controller.value,
-              ),
-              size: Size.infinite,
-            );
-          },
+        RepaintBoundary(
+          child: AnimatedBuilder(
+            animation: _controller,
+            builder: (context, _) {
+              return CustomPaint(
+                painter: _SwirlPainter(
+                  colors: widget.colors,
+                  progress: _controller.value,
+                ),
+                size: Size.infinite,
+              );
+            },
+          ),
         ),
-        widget.child,
+        RepaintBoundary(
+          child: widget.child,
+        ),
       ],
     );
   }
@@ -59,12 +63,12 @@ class _NeonSwirlBackgroundState extends State<NeonSwirlBackground>
 class _SwirlPainter extends CustomPainter {
   final List<Color> colors;
   final double progress;
+  final math.Random _random = math.Random(42);
 
   _SwirlPainter({required this.colors, required this.progress});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final random = math.Random(42);
     for (int i = 0; i < 5; i++) {
       final color = colors[i % colors.length];
       final paint = Paint()
@@ -72,7 +76,7 @@ class _SwirlPainter extends CustomPainter {
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 40);
 
       // Orbital movement
-      final radius = (size.width * 0.3) + random.nextDouble() * 100;
+      final radius = (size.width * 0.3) + _random.nextDouble() * 100;
       final angle = (progress * 2 * math.pi) + (i * math.pi / 2.5);
 
       final x = size.width / 2 +
@@ -80,10 +84,10 @@ class _SwirlPainter extends CustomPainter {
       final y = size.height / 2 +
           math.sin(angle) * radius * math.cos(progress * math.pi);
 
-      canvas.drawCircle(Offset(x, y), 60 + random.nextDouble() * 40, paint);
+      canvas.drawCircle(Offset(x, y), 60 + _random.nextDouble() * 40, paint);
     }
   }
 
   @override
-  bool shouldRepaint(_SwirlPainter oldDelegate) => true;
+  bool shouldRepaint(_SwirlPainter oldDelegate) => oldDelegate.progress != progress;
 }

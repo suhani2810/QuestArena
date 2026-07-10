@@ -17,6 +17,7 @@ import '../widgets/smart_avatar.dart';
 import '../widgets/neon_swirl_background.dart';
 import '../widgets/lifeline_button.dart';
 import 'result_screen.dart';
+import 'guild/guild_result_screen.dart';
 
 class GameScreen extends ConsumerStatefulWidget {
   final String roomId;
@@ -301,9 +302,19 @@ class _GameScreenState extends ConsumerState<GameScreen>
         _heartbeatTimer?.cancel();
         _syncTimer?.cancel();
         _forfeitTimer?.cancel();
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => ResultScreen(room: room)),
-        );
+        if (context.mounted) {
+          if (room.guildBattleId != null) {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(
+                builder: (_) => GuildResultScreen(matchId: room.guildBattleId!),
+              ),
+            );
+          } else {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (_) => ResultScreen(room: room)),
+            );
+          }
+        }
         return;
       }
 

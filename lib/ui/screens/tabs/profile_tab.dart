@@ -3,16 +3,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/colors.dart';
 import '../../../core/constants/text_styles.dart';
-import '../../../core/utils/rank_system.dart';
 import '../../../providers/user_providers.dart';
 import '../../../providers/auth_providers.dart';
-import '../../../providers/leaderboard_providers.dart';
-import '../../../data/models/leaderboard_model.dart';
+import '../../../providers/guild_providers.dart';
 import '../../../data/models/user_model.dart';
+import '../../../data/models/guild_model.dart';
 import '../../widgets/neon_swirl_background.dart';
 import '../../widgets/smart_avatar.dart';
+import '../../widgets/player_profile_dialog.dart';
 import 'edit_profile_screen.dart';
-import 'leaderboard_tab.dart';
+import '../guild/guild_home_screen.dart';
+import '../guild/guild_dialogs.dart';
+import '../avatar_selection_screen.dart';
+import '../border_selection_screen.dart';
 
 class ProfileTab extends ConsumerStatefulWidget {
   const ProfileTab({super.key});
@@ -47,36 +50,6 @@ class _ProfileTabState extends ConsumerState<ProfileTab>
     super.dispose();
   }
 
-  void _showDeleteConfirmation(BuildContext context, String uid) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.cardBg,
-        title: Text('DELETE ACCOUNT?',
-            style: AppTextStyles.headline.copyWith(color: AppColors.red)),
-        content: const Text(
-            'This action is permanent. All your data will be lost.',
-            style: TextStyle(color: AppColors.textSecondary)),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text('CANCEL', style: AppTextStyles.label)),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await ref.read(userRepositoryProvider).deleteUserProfile(uid);
-              await ref.read(authRepositoryProvider).deleteAccount();
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.red),
-            child: const Text('DELETE',
-                style: TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _reportIssue() async {
     final String subject = Uri.encodeComponent('QuestArena Bug Report');
     final String body =
@@ -91,7 +64,7 @@ class _ProfileTabState extends ConsumerState<ProfileTab>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Text(
                 'Failed to open email app. Please email imaginati.appdev@gmail.com directly.'),
             backgroundColor: AppColors.neonPink,
@@ -101,199 +74,234 @@ class _ProfileTabState extends ConsumerState<ProfileTab>
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final userAsync = ref.watch(currentUserProvider);
-
-    return userAsync.when(
-      loading: () =>
-          const Center(child: CircularProgressIndicator(color: AppColors.gold)),
-      error: (e, s) => Center(child: Text('Error: $e')),
-      data: (user) {
-        if (user == null) return const Center(child: Text('User not found'));
-
-        return Scaffold(
-          backgroundColor: Colors.transparent,
-          appBar: AppBar(
-            title: Text('PROFILE',
-                style: AppTextStyles.display
-                    .copyWith(fontSize: 18, letterSpacing: 4)),
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            centerTitle: true,
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.logout_rounded, color: AppColors.red),
-                onPressed: () => ref.read(authRepositoryProvider).logout(),
-              ),
-            ],
+  void _showDeleteConfirmation(String uid) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.cardBg,
+        title: Text('DELETE ACCOUNT?',
+            style: AppTextStyles.headline.copyWith(color: AppColors.red)),
+        content: const Text(
+            'This action is permanent. All your data will be lost.',
+            style: TextStyle(color: AppColors.textSecondary)),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('CANCEL')),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await ref.read(userRepositoryProvider).deleteUserProfile(uid);
+              await ref.read(authRepositoryProvider).deleteAccount();
+            },
+            child: const Text('DELETE', style: TextStyle(color: AppColors.red)),
           ),
-          body: NeonSwirlBackground(
-            colors: const [AppColors.neonCyan, AppColors.neonViolet],
-            child: FadeTransition(
-              opacity: _fadeAnimation,
-              child: SlideTransition(
-                position: _slideAnimation,
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    children: [
-                      // CLEAN HEADER
-                      Center(
-                        child: SmartAvatar(
-                            avatarUrl: user.avatarUrl,
-                            size: 120,
-                            showGlow: true,
-                            showBorder: true),
-                      ),
-                      const SizedBox(height: 20),
-                      Text(user.username.toUpperCase(),
-                          style: AppTextStyles.headline
-                              .copyWith(fontSize: 28, letterSpacing: 2)),
-                      const SizedBox(height: 24),
-
-                      // UNIFIED EDIT BUTTON (Purple as requested)
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                  builder: (_) => const EditProfileScreen())),
-                          icon: const Icon(Icons.tune_rounded,
-                              size: 20, color: Colors.white),
-                          label: const Text('EDIT PROFILE',
-                              style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w900,
-                                  letterSpacing: 1.5)),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.purple,
-                            padding: const EdgeInsets.symmetric(vertical: 18),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(20)),
-                            elevation: 8,
-                            shadowColor:
-                                AppColors.purple.withValues(alpha: 0.4),
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 40),
-
-                      // UNIFIED ANALYTICS CARD
-                      _buildAnalyticsSection(user),
-
-                      const SizedBox(height: 32),
-
-                      // SOCIAL SECTION
-                      const _FriendRequestsSection(),
-                      const _FriendsListSection(),
-
-                      const SizedBox(height: 40),
-
-                      // SUPPORT CARD
-                      _buildSupportSection(),
-
-                      const SizedBox(height: 48),
-
-                      // DELETE ACCOUNT
-                      TextButton.icon(
-                        onPressed: () =>
-                            _showDeleteConfirmation(context, user.uid),
-                        icon: const Icon(Icons.delete_forever_rounded,
-                            color: AppColors.red, size: 20),
-                        label: Text(
-                          'DELETE ACCOUNT',
-                          style: AppTextStyles.label.copyWith(
-                              color: AppColors.red,
-                              fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      const SizedBox(height: 32),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
+        ],
+      ),
     );
   }
 
-  Widget _buildAnalyticsSection(UserModel user) {
+  @override
+  Widget build(BuildContext context) {
+    final user = ref.watch(currentUserProvider).value;
+    if (user == null) return const Center(child: CircularProgressIndicator());
+
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(
+        title: Text('PROFILE',
+            style:
+                AppTextStyles.display.copyWith(fontSize: 18, letterSpacing: 4)),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout_rounded, color: AppColors.red),
+            onPressed: () => ref.read(authRepositoryProvider).logout(),
+          ),
+        ],
+      ),
+      body: NeonSwirlBackground(
+        colors: const [AppColors.neonCyan, AppColors.neonViolet],
+        child: FadeTransition(
+          opacity: _fadeAnimation,
+          child: SlideTransition(
+            position: _slideAnimation,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Column(
+                children: [
+                  const SizedBox(height: 20),
+                  SmartAvatar(
+                    avatarUrl: user.avatarUrl,
+                    size: 120,
+                    showGlow: true,
+                    showBorder: true,
+                    borderId: user.selectedBorder,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(user.username.toUpperCase(),
+                      style: AppTextStyles.headline
+                          .copyWith(fontSize: 26, letterSpacing: 2)),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const EditProfileScreen())),
+                      icon: const Icon(Icons.tune_rounded,
+                          size: 20, color: Colors.white),
+                      label: const Text('EDIT PROFILE',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.purple,
+                        padding: const EdgeInsets.symmetric(vertical: 18),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                                24)), // Changed to 24 for pixel-perfect consistency
+                        elevation: 4,
+                        shadowColor: AppColors.purple.withValues(alpha: 0.5),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  _buildCustomizationRow(context),
+                  const SizedBox(height: 32),
+                  _buildAnalyticsGrid(user),
+                  const SizedBox(height: 32),
+                  _ProfileGuildSection(user: user),
+                  const SizedBox(height: 32),
+                  const _FriendRequestsSection(),
+                  const _FriendsListSection(),
+                  const SizedBox(height: 32),
+                  _buildSupportCard(),
+                  const SizedBox(height: 48),
+                  TextButton.icon(
+                    onPressed: () => _showDeleteConfirmation(user.uid),
+                    icon: const Icon(Icons.delete_forever_rounded,
+                        color: AppColors.red, size: 20),
+                    label: Text('DELETE ACCOUNT',
+                        style: AppTextStyles.label.copyWith(
+                            color: AppColors.red, fontWeight: FontWeight.bold)),
+                  ),
+                  const SizedBox(height: 40),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCustomizationRow(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _CustomizationCard(
+            title: 'AVATARS',
+            icon: Icons.face_rounded,
+            color: AppColors.neonCyan,
+            onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const AvatarSelectionScreen())),
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: _CustomizationCard(
+            title: 'BORDERS',
+            icon: Icons.verified_user_rounded,
+            color: AppColors.gold,
+            onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const BorderSelectionScreen())),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAnalyticsGrid(UserModel user) {
     return Container(
-      width: double.infinity,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: AppColors.cardBg.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(32),
-        border: Border.all(color: AppColors.surface),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withValues(alpha: 0.1),
-              blurRadius: 20,
-              offset: const Offset(0, 10))
-        ],
+        border: Border.all(color: AppColors.surface, width: 1.5),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('PERFORMANCE ANALYTICS',
+          Text('ANALYTICS',
               style: AppTextStyles.label.copyWith(
-                  letterSpacing: 2,
                   color: AppColors.gold,
-                  fontWeight: FontWeight.w900)),
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 2)),
           const SizedBox(height: 24),
-
-          // Primary Stats Grid - Fixed AspectRatio for better fit
           GridView.count(
             crossAxisCount: 2,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             mainAxisSpacing: 16,
             crossAxisSpacing: 16,
-            childAspectRatio: 1.8, // Decreased from 2.1 to make items TALLER
+            childAspectRatio:
+                1.05, // Further reduced from 1.15 to ensure absolute pixel-perfect safety
             children: [
-              _AnalyticsItem(
+              _StatItem(
+                  icon: Icons.military_tech_rounded,
+                  label: 'LEVEL',
+                  value: '${user.level}',
+                  color: AppColors.purple),
+              _StatItem(
+                  icon: Icons.stars_rounded,
                   label: 'TOTAL XP',
                   value: '${user.xp}',
-                  color: AppColors.purple,
-                  icon: Icons.stars_rounded),
-              _AnalyticsItem(
+                  color: AppColors.neonViolet),
+              _StatItem(
+                  icon: Icons.monetization_on_rounded,
                   label: 'COINS',
                   value: '${user.coins}',
-                  color: AppColors.gold,
-                  icon: Icons.monetization_on_rounded),
-              _AnalyticsItem(
+                  color: AppColors.gold),
+              _StatItem(
+                  icon: Icons.emoji_events_rounded,
                   label: 'WINS',
                   value: '${user.wins}',
-                  color: AppColors.teal,
-                  icon: Icons.emoji_events_rounded),
-              _AnalyticsItem(
+                  color: AppColors.teal),
+              _StatItem(
+                  icon: Icons.my_location_rounded,
+                  label: 'ACCURACY',
+                  value: '${user.averageAccuracy.toStringAsFixed(1)}%',
+                  color: AppColors.neonCyan),
+              _StatItem(
+                  icon: Icons.whatshot_rounded,
                   label: 'STREAK',
-                  value: '${user.currentWinStreak}',
-                  color: AppColors.red,
-                  icon: Icons.whatshot_rounded),
+                  value: '${user.loginStreak}',
+                  color: AppColors.red),
             ],
           ),
-
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 24),
-            child: Divider(color: AppColors.surface, height: 1),
-          ),
-
-          // Secondary Stats Row
+          const SizedBox(height: 24),
+          const Divider(color: AppColors.surface, height: 1),
+          const SizedBox(height: 24),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _ProfileStatItem(
-                  label: 'MATCHES', value: '${user.matchesPlayed}'),
-              _ProfileStatItem(
-                  label: 'WIN RATE',
-                  value: '${user.winRate.toStringAsFixed(1)}%'),
-              _ProfileStatItem(label: 'DRAWS', value: '${user.draws}'),
+              Expanded(
+                  child: _SimpleStat(
+                      label: 'MATCHES', value: '${user.matchesPlayed}')),
+              Expanded(
+                  child: _SimpleStat(
+                      label: 'WIN RATE',
+                      value: '${user.winRate.toStringAsFixed(1)}%')),
+              Expanded(
+                  child: _SimpleStat(
+                      label: 'AB WINS', value: '${user.arenaBreakerWins}')),
             ],
           ),
         ],
@@ -301,7 +309,7 @@ class _ProfileTabState extends ConsumerState<ProfileTab>
     );
   }
 
-  Widget _buildSupportSection() {
+  Widget _buildSupportCard() {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -313,41 +321,240 @@ class _ProfileTabState extends ConsumerState<ProfileTab>
         children: [
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                    color: AppColors.neonPink.withValues(alpha: 0.1),
-                    shape: BoxShape.circle),
-                child: const Icon(Icons.help_center_rounded,
-                    color: AppColors.neonPink, size: 24),
-              ),
+              Icon(Icons.help_outline_rounded,
+                  color: AppColors.neonPink.withValues(alpha: 0.8), size: 24),
               const SizedBox(width: 16),
+              Text('SUPPORT',
+                  style: AppTextStyles.headline.copyWith(fontSize: 18)),
+            ],
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _reportIssue,
+              icon: const Icon(Icons.bug_report_rounded,
+                  color: AppColors.neonPink),
+              label: const Text('REPORT AN ISSUE',
+                  style: TextStyle(
+                      color: AppColors.neonPink, fontWeight: FontWeight.bold)),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: AppColors.neonPink),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text('imaginati.appdev@gmail.com',
+              style: AppTextStyles.label
+                  .copyWith(fontSize: 10, color: AppColors.textMuted)),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileGuildSection extends ConsumerWidget {
+  final UserModel user;
+  const _ProfileGuildSection({required this.user});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Case 1: User is already in a guild
+    if (user.guildId != null) {
+      final guildAsync = ref.watch(userGuildProvider);
+      return guildAsync.when(
+        data: (guild) {
+          if (guild == null) return const _NoGuildCard();
+          return _GuildInformationCard(guild: guild);
+        },
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (_, __) => const _NoGuildCard(),
+      );
+    }
+
+    // Case 2 & 3: Not in a guild, check for invitations
+    final invitesAsync = ref.watch(guildInvitationsProvider);
+    return invitesAsync.when(
+      data: (invites) {
+        if (invites.isNotEmpty) {
+          return _GuildInvitationsCarousel(invites: invites);
+        }
+        return const _NoGuildCard();
+      },
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (_, __) => const _NoGuildCard(),
+    );
+  }
+}
+
+class _GuildInformationCard extends ConsumerWidget {
+  final GuildModel guild;
+  const _GuildInformationCard({required this.guild});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return GestureDetector(
+      onTap: () => Navigator.push(
+          context, MaterialPageRoute(builder: (_) => const GuildHomeScreen())),
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: AppColors.cardBg.withValues(alpha: 0.6),
+          borderRadius: BorderRadius.circular(32),
+          border: Border.all(
+              color: AppColors.neonPink.withValues(alpha: 0.3), width: 1.5),
+          boxShadow: [
+            BoxShadow(
+                color: AppColors.neonPink.withValues(alpha: 0.1),
+                blurRadius: 20,
+                spreadRadius: 2),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.neonPink.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                        color: AppColors.neonPink.withValues(alpha: 0.3)),
+                  ),
+                  child: Icon(_getGuildIcon(guild.iconId),
+                      color: AppColors.neonPink, size: 32),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(guild.name.toUpperCase(),
+                          style: AppTextStyles.headline
+                              .copyWith(fontSize: 20, letterSpacing: 1)),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(Icons.star_rounded,
+                              color: AppColors.gold, size: 14),
+                          const SizedBox(width: 4),
+                          Text('LEVEL ${guild.level}',
+                              style: AppTextStyles.label.copyWith(
+                                  fontSize: 10,
+                                  color: AppColors.gold,
+                                  fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right_rounded,
+                    color: AppColors.textMuted),
+              ],
+            ),
+            const SizedBox(height: 20),
+            const _GuildLeaderInfo(),
+            const SizedBox(height: 20),
+            _GuildXpProgressBar(xp: guild.xp),
+          ],
+        ),
+      ),
+    );
+  }
+
+  IconData _getGuildIcon(String id) {
+    switch (id) {
+      case '1':
+        return Icons.auto_awesome_rounded;
+      case '2':
+        return Icons.military_tech_rounded;
+      case '3':
+        return Icons.shield_rounded;
+      case '4':
+        return Icons.bolt_rounded;
+      case '5':
+        return Icons.workspace_premium_rounded;
+      case '6':
+        return Icons.pets_rounded;
+      default:
+        return Icons.groups_rounded;
+    }
+  }
+}
+
+class _NoGuildCard extends StatelessWidget {
+  const _NoGuildCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: AppColors.cardBg.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(32),
+        border: Border.all(color: AppColors.surface, width: 1.5),
+      ),
+      child: Column(
+        children: [
+          const Icon(Icons.castle_rounded,
+              color: AppColors.textMuted, size: 48),
+          const SizedBox(height: 16),
+          Text('NOT CURRENTLY IN A GUILD',
+              style: AppTextStyles.label.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1)),
+          const SizedBox(height: 12),
+          Text(
+            'Join a guild to participate in exclusive battles and climb the ranks with your team.',
+            style: AppTextStyles.label
+                .copyWith(fontSize: 11, color: AppColors.textSecondary),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          Row(
+            children: [
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('NEED ASSISTANCE?',
-                        style: AppTextStyles.headline.copyWith(fontSize: 16)),
-                    Text('Contact our development team',
-                        style: AppTextStyles.label.copyWith(
-                            fontSize: 10, color: AppColors.textSecondary)),
-                  ],
+                child: Consumer(
+                  builder: (context, ref, _) => OutlinedButton(
+                    onPressed: () => showJoinGuildDialog(context, ref),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: AppColors.neonCyan),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    child: const Text('JOIN',
+                        style: TextStyle(
+                            color: AppColors.neonCyan,
+                            fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Consumer(
+                  builder: (context, ref, _) => ElevatedButton(
+                    onPressed: () => showCreateGuildDialog(context, ref),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.neonPink,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    child: const Text('CREATE',
+                        style: TextStyle(
+                            color: Colors.white, fontWeight: FontWeight.bold)),
+                  ),
                 ),
               ),
             ],
-          ),
-          const SizedBox(height: 24),
-          _SupportButton(
-            icon: Icons.bug_report_rounded,
-            label: 'REPORT AN ISSUE',
-            color: AppColors.neonPink,
-            onTap: _reportIssue,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Email: imaginati.appdev@gmail.com',
-            style: AppTextStyles.label
-                .copyWith(fontSize: 10, color: AppColors.textMuted),
           ),
         ],
       ),
@@ -355,54 +562,217 @@ class _ProfileTabState extends ConsumerState<ProfileTab>
   }
 }
 
-class _AnalyticsItem extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color color;
-  final IconData icon;
-  const _AnalyticsItem(
-      {required this.label,
-      required this.value,
-      required this.color,
-      required this.icon});
+class _GuildInvitationsCarousel extends StatefulWidget {
+  final List<Map<String, dynamic>> invites;
+  const _GuildInvitationsCarousel({required this.invites});
+
+  @override
+  State<_GuildInvitationsCarousel> createState() =>
+      _GuildInvitationsCarouselState();
+}
+
+class _GuildInvitationsCarouselState extends State<_GuildInvitationsCarousel> {
+  final PageController _pageController = PageController();
+  int _currentPage = 0;
 
   @override
   Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('PENDING INVITATIONS',
+                style: AppTextStyles.label.copyWith(
+                    letterSpacing: 2,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.neonCyan)),
+            if (widget.invites.length > 1)
+              Text('${_currentPage + 1}/${widget.invites.length}',
+                  style: AppTextStyles.label
+                      .copyWith(fontSize: 10, color: AppColors.textMuted)),
+          ],
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          height: 200,
+          child: PageView.builder(
+            controller: _pageController,
+            onPageChanged: (index) => setState(() => _currentPage = index),
+            itemCount: widget.invites.length,
+            itemBuilder: (context, index) =>
+                _InvitationCard(invite: widget.invites[index]),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _InvitationCard extends ConsumerWidget {
+  final Map<String, dynamic> invite;
+  const _InvitationCard({required this.invite});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(currentUserProvider).value;
+
     return Container(
-      padding: const EdgeInsets.all(10),
+      margin: const EdgeInsets.only(right: 8),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(16),
+        color: AppColors.bgCard,
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(
+            color: AppColors.neonCyan.withValues(alpha: 0.4), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+              color: AppColors.neonCyan.withValues(alpha: 0.1),
+              blurRadius: 15,
+              spreadRadius: 1),
+        ],
       ),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icon, color: color, size: 14),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  label,
-                  style: AppTextStyles.label.copyWith(
-                      fontSize: 8,
-                      color: AppColors.textSecondary,
-                      fontWeight: FontWeight.bold),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                    color: AppColors.neonCyan.withValues(alpha: 0.1),
+                    shape: BoxShape.circle),
+                child: Icon(_getGuildIcon(invite['guildIconId']),
+                    color: AppColors.neonCyan, size: 28),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(invite['guildName'].toUpperCase(),
+                        style: AppTextStyles.headline
+                            .copyWith(fontSize: 18, letterSpacing: 1)),
+                    Text('Invited by @${invite['senderName']}',
+                        style: AppTextStyles.label.copyWith(
+                            fontSize: 10, color: AppColors.textSecondary)),
+                  ],
                 ),
               ),
             ],
           ),
+          const Spacer(),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => ref
+                      .read(guildRepositoryProvider)
+                      .declineInvitation(invite['id']),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: AppColors.red),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('DECLINE',
+                      style: TextStyle(
+                          color: AppColors.red,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold)),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () => ref
+                      .read(guildRepositoryProvider)
+                      .acceptInvitation(invite['id'], user!.uid),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.neonCyan,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('JOIN GUILD',
+                      style: TextStyle(
+                          color: Colors.black,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  IconData _getGuildIcon(String id) {
+    switch (id) {
+      case '1':
+        return Icons.auto_awesome_rounded;
+      case '2':
+        return Icons.military_tech_rounded;
+      case '3':
+        return Icons.shield_rounded;
+      case '4':
+        return Icons.bolt_rounded;
+      case '5':
+        return Icons.workspace_premium_rounded;
+      case '6':
+        return Icons.pets_rounded;
+      default:
+        return Icons.groups_rounded;
+    }
+  }
+}
+
+class _StatItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+
+  const _StatItem({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, color: color, size: 22),
           const SizedBox(height: 4),
-          Expanded(
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(value,
-                  style: AppTextStyles.headline
-                      .copyWith(fontSize: 22, color: Colors.white)),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value,
+              style:
+                  AppTextStyles.headline.copyWith(fontSize: 18, color: color),
+            ),
+          ),
+          const SizedBox(height: 2),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              label,
+              style: AppTextStyles.label.copyWith(
+                fontSize: 9,
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
             ),
           ),
         ],
@@ -411,10 +781,53 @@ class _AnalyticsItem extends StatelessWidget {
   }
 }
 
-class _ProfileStatItem extends StatelessWidget {
+class _CustomizationCard extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _CustomizationCard({
+    required this.title,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        decoration: BoxDecoration(
+          color: AppColors.cardBg.withValues(alpha: 0.6),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: AppColors.surface),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: 32),
+            const SizedBox(height: 12),
+            Text(
+              title,
+              style: AppTextStyles.label.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SimpleStat extends StatelessWidget {
   final String label;
   final String value;
-  const _ProfileStatItem({required this.label, required this.value});
+  const _SimpleStat({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -428,45 +841,6 @@ class _ProfileStatItem extends StatelessWidget {
                 color: AppColors.textSecondary,
                 fontWeight: FontWeight.bold)),
       ],
-    );
-  }
-}
-
-class _SupportButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color color;
-  final VoidCallback onTap;
-  const _SupportButton(
-      {required this.icon,
-      required this.label,
-      required this.color,
-      required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        decoration: BoxDecoration(
-          border: Border.all(color: color.withValues(alpha: 0.5)),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: color, size: 18),
-            const SizedBox(width: 12),
-            Text(label,
-                style: AppTextStyles.label.copyWith(
-                    color: color,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 1)),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -485,69 +859,55 @@ class _FriendRequestsSection extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 32),
-            const Text('FRIEND REQUESTS',
-                style: TextStyle(
-                    color: AppColors.textMuted,
+            Text('FRIEND REQUESTS',
+                style: AppTextStyles.label.copyWith(
+                    letterSpacing: 2,
                     fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 2)),
+                    fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: requests.length,
-              itemBuilder: (context, index) {
-                final request = requests[index];
-                final data = request.data();
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
+            ...requests.map((request) {
+              final data = request.data();
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
                     color: AppColors.cardBg,
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppColors.surface),
-                  ),
-                  child: Row(
-                    children: [
-                      SmartAvatar(avatarUrl: data['senderAvatar'], size: 40),
-                      const SizedBox(width: 12),
-                      Expanded(
+                    border: Border.all(color: AppColors.surface)),
+                child: Row(
+                  children: [
+                    SmartAvatar(
+                      avatarUrl: data['senderAvatar'],
+                      size: 40,
+                      borderId: data['senderBorder'],
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(data['senderUsername'],
-                                style: AppTextStyles.bodyMd
-                                    .copyWith(fontWeight: FontWeight.bold)),
-                            Text('Sent you a request',
-                                style: AppTextStyles.label.copyWith(
-                                    fontSize: 10,
-                                    color: AppColors.textSecondary)),
-                          ],
-                        ),
-                      ),
-                      Row(
-                        children: [
-                          IconButton(
-                            onPressed: () => ref
-                                .read(friendsRepositoryProvider)
-                                .acceptFriendRequest(request.id, data),
-                            icon: const Icon(Icons.check_circle_rounded,
-                                color: AppColors.teal),
-                          ),
-                          IconButton(
-                            onPressed: () => ref
-                                .read(friendsRepositoryProvider)
-                                .rejectFriendRequest(request.id),
-                            icon: const Icon(Icons.cancel_rounded,
-                                color: AppColors.red),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                          Text(data['senderUsername'],
+                              style: AppTextStyles.bodyMd
+                                  .copyWith(fontWeight: FontWeight.bold)),
+                          Text('Sent a request',
+                              style: AppTextStyles.label.copyWith(fontSize: 10))
+                        ])),
+                    IconButton(
+                        onPressed: () => ref
+                            .read(friendsRepositoryProvider)
+                            .acceptFriendRequest(request.id, data),
+                        icon: const Icon(Icons.check_circle_rounded,
+                            color: AppColors.teal)),
+                    IconButton(
+                        onPressed: () => ref
+                            .read(friendsRepositoryProvider)
+                            .rejectFriendRequest(request.id),
+                        icon: const Icon(Icons.cancel_rounded,
+                            color: AppColors.red)),
+                  ],
+                ),
+              );
+            }),
           ],
         );
       },
@@ -557,57 +917,6 @@ class _FriendRequestsSection extends ConsumerWidget {
 
 class _FriendsListSection extends ConsumerWidget {
   const _FriendsListSection();
-  void _showFriendProfile(
-      BuildContext context, WidgetRef ref, LeaderboardModel friend) {
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        backgroundColor: AppColors.cardBg,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  children: [
-                    SmartAvatar(avatarUrl: friend.avatarUrl, size: 60),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(friend.username,
-                              style: AppTextStyles.headline
-                                  .copyWith(fontSize: 20)),
-                          Text(
-                              'LVL ${friend.level} • ${RankSystem.getRankName(friend.rank, friend.subRank)}',
-                              style: AppTextStyles.label.copyWith(
-                                  fontSize: 10,
-                                  color: AppColors.textSecondary)),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                _FriendProfileStats(friend: friend),
-                const SizedBox(height: 16),
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: Text('CLOSE',
-                      style: AppTextStyles.label
-                          .copyWith(color: AppColors.textSecondary)),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final friendsAsync = ref.watch(friendsProvider);
@@ -615,26 +924,20 @@ class _FriendsListSection extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 32),
-        const Text('FRIENDS',
-            style: TextStyle(
-                color: AppColors.textMuted,
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 2)),
+        Text('FRIENDS',
+            style: AppTextStyles.label.copyWith(
+                letterSpacing: 2, fontSize: 10, fontWeight: FontWeight.bold)),
         const SizedBox(height: 16),
         friendsAsync.when(
-          loading: () => const SizedBox(
-              height: 100, child: Center(child: CircularProgressIndicator())),
+          loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, s) => Text('Error: $e'),
           data: (friends) {
-            if (friends.isEmpty) {
+            if (friends.isEmpty)
               return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                child: Text('You haven\'t added any friends yet.',
-                    style: AppTextStyles.bodyMd
-                        .copyWith(color: AppColors.textMuted, fontSize: 12)),
-              );
-            }
+                  padding: const EdgeInsets.symmetric(vertical: 20),
+                  child: Text('No friends added yet',
+                      style: AppTextStyles.bodyMd
+                          .copyWith(color: AppColors.textMuted, fontSize: 12)));
             return SizedBox(
               height: 100,
               child: ListView.builder(
@@ -643,23 +946,20 @@ class _FriendsListSection extends ConsumerWidget {
                 itemBuilder: (context, index) {
                   final friend = friends[index];
                   return GestureDetector(
-                    onTap: () => _showFriendProfile(context, ref, friend),
+                    onTap: () => PlayerProfileDialog.show(context,
+                        uid: friend.uid, player: friend, isMe: false),
                     child: Container(
                       width: 80,
                       margin: const EdgeInsets.only(right: 12),
                       child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           SmartAvatar(avatarUrl: friend.avatarUrl, size: 50),
                           const SizedBox(height: 8),
-                          Text(
-                            friend.username,
-                            style: AppTextStyles.bodyMd.copyWith(
-                                fontSize: 10, fontWeight: FontWeight.bold),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.center,
-                          ),
+                          Text(friend.username,
+                              style: AppTextStyles.bodyMd.copyWith(
+                                  fontSize: 10, fontWeight: FontWeight.bold),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis),
                         ],
                       ),
                     ),
@@ -674,49 +974,73 @@ class _FriendsListSection extends ConsumerWidget {
   }
 }
 
-class _FriendProfileStats extends StatelessWidget {
-  final LeaderboardModel friend;
-
-  const _FriendProfileStats({required this.friend});
+class _GuildLeaderInfo extends ConsumerWidget {
+  const _GuildLeaderInfo();
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.bgBase.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.surface),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          _FriendStat(label: 'WINS', value: '${friend.wins}'),
-          _FriendStat(label: 'XP', value: '${friend.xp}'),
-          _FriendStat(label: 'ELO', value: '${friend.eloRating}'),
-        ],
-      ),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final guildAsync = ref.watch(userGuildProvider);
+    return guildAsync.when(
+      data: (guild) {
+        if (guild == null) return const SizedBox.shrink();
+        final leaderAsync = ref.watch(userProfileProvider(guild.leaderUid));
+        return leaderAsync.when(
+          data: (leader) {
+            if (leader == null) return const SizedBox.shrink();
+            return Row(
+              children: [
+                Text('LEADER: ',
+                    style: AppTextStyles.label.copyWith(
+                        fontSize: 10, color: AppColors.textSecondary)),
+                Text('@${leader.username}',
+                    style: AppTextStyles.label.copyWith(
+                        fontSize: 10,
+                        color: AppColors.gold,
+                        fontWeight: FontWeight.bold)),
+              ],
+            );
+          },
+          loading: () => const SizedBox.shrink(),
+          error: (_, __) => const SizedBox.shrink(),
+        );
+      },
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
     );
   }
 }
 
-class _FriendStat extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _FriendStat({required this.label, required this.value});
+class _GuildXpProgressBar extends StatelessWidget {
+  final int xp;
+  const _GuildXpProgressBar({required this.xp});
 
   @override
   Widget build(BuildContext context) {
+    final int xpInLevel = xp % 1000;
+    final double progress = xpInLevel / 1000;
+
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(value, style: AppTextStyles.headline.copyWith(fontSize: 18)),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: AppTextStyles.label.copyWith(
-            fontSize: 9,
-            color: AppColors.textSecondary,
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('GUILD XP',
+                style: AppTextStyles.label
+                    .copyWith(fontSize: 9, color: AppColors.textSecondary)),
+            Text('$xpInLevel / 1000',
+                style: AppTextStyles.label
+                    .copyWith(fontSize: 9, color: AppColors.textSecondary)),
+          ],
+        ),
+        const SizedBox(height: 8),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: LinearProgressIndicator(
+            value: progress,
+            minHeight: 6,
+            backgroundColor: AppColors.surface,
+            valueColor: const AlwaysStoppedAnimation(AppColors.neonPink),
           ),
         ),
       ],

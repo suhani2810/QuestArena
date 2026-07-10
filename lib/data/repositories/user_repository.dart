@@ -271,6 +271,9 @@ class UserRepository {
           'rankProtectionActive': false,
           'ownedShieldPackage':
               remainingRankProtection > 0 ? user.ownedShieldPackage : 0,
+          'totalQuestionsCorrect': user.totalQuestionsCorrect + correctAnswers,
+          'totalPerfectScores': user.totalPerfectScores +
+              (correctAnswers >= totalQuestions ? 1 : 0),
         });
 
         matchResult = MatchEndResult(

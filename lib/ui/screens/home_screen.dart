@@ -6,14 +6,18 @@ import '../../providers/streak_providers.dart';
 import '../../providers/achievement_providers.dart';
 import '../../providers/avatar_providers.dart';
 import '../../providers/border_providers.dart';
+import '../../providers/unlock_providers.dart';
+import '../../core/constants/avatars.dart';
 import '../../core/constants/borders.dart';
 import '../../core/errors/result.dart';
 import 'tabs/dashboard_tab.dart';
 import 'tabs/battle_tab.dart';
 import 'tabs/leaderboard_tab.dart';
 import 'tabs/profile_tab.dart';
+import 'achievements_screen.dart';
 import '../widgets/streak_reward_popup.dart';
 import '../widgets/achievement_popup.dart';
+import '../widgets/unlock_popup.dart';
 import '../widgets/weekly_reward_popup.dart';
 import '../../providers/navigation_providers.dart';
 
@@ -32,6 +36,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   final List<Widget> _tabs = [
     const DashboardTab(),
     const BattleTab(),
+    const AchievementsScreen(),
     const LeaderboardTab(),
     const ProfileTab(),
   ];
@@ -85,8 +90,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     // 1. Sync Achievements (Retroactive)
     await ref.read(achievementServiceProvider).syncAll(user);
 
-    // 2. Sync Avatars (Retroactive based on Rank)
+    // 2. Sync Avatars & Borders (Retroactive based on Rank)
     await ref.read(avatarServiceProvider).checkAndUnlockLeagues(user.uid, user.rank);
+    await ref.read(borderServiceProvider).checkAndUnlockLeagues(user.uid, user.rank);
   }
 
   void _checkDailyReward() async {
@@ -148,6 +154,46 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       }
     });
 
+    // Listen for borders
+    ref.listen(lastUnlockedBorderProvider, (previous, next) {
+      if (next != null) {
+        final border = AppBorders.getBorderById(next);
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => UnlockPopup(
+            title: 'New Profile Border',
+            name: border.name,
+            borderId: border.id,
+            onDismiss: () {
+              Navigator.pop(context);
+              ref.read(lastUnlockedBorderProvider.notifier).state = null;
+            },
+          ),
+        );
+      }
+    });
+
+    // Listen for avatars
+    ref.listen(lastUnlockedAvatarProvider, (previous, next) {
+      if (next != null) {
+        final avatar = AppAvatars.getAvatarByImage(next);
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => UnlockPopup(
+            title: 'New Avatar Unlocked',
+            name: avatar.name,
+            image: avatar.image,
+            onDismiss: () {
+              Navigator.pop(context);
+              ref.read(lastUnlockedAvatarProvider.notifier).state = null;
+            },
+          ),
+        );
+      }
+    });
+
     return Scaffold(
       body: _tabs[selectedIndex],
       bottomNavigationBar: Container(
@@ -155,7 +201,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           border: Border(top: BorderSide(color: AppColors.divider.withValues(alpha: 0.5), width: 0.5)),
         ),
         child: NavigationBar(
-          height: 65,
+          height: 72, // Increased from 65 for better "pixel perfect" spacing
           elevation: 0,
           backgroundColor: AppColors.bgBase,
           selectedIndex: selectedIndex,
@@ -165,8 +211,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           destinations: [
             _buildNavItem(0, Icons.dashboard_rounded, Icons.dashboard_outlined, 'HUB'),
             _buildNavItem(1, Icons.bolt_rounded, Icons.bolt_outlined, 'BATTLE'),
-            _buildNavItem(2, Icons.leaderboard_rounded, Icons.leaderboard_outlined, 'RANKS'),
-            _buildNavItem(3, Icons.person_rounded, Icons.person_outlined, 'PROFILE'),
+            _buildNavItem(2, Icons.emoji_events_rounded, Icons.emoji_events_outlined, 'TROPHIES'),
+            _buildNavItem(3, Icons.leaderboard_rounded, Icons.leaderboard_outlined, 'RANKS'),
+            _buildNavItem(4, Icons.person_rounded, Icons.person_outlined, 'PROFILE'),
           ],
         ),
       ),

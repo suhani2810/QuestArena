@@ -3,11 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../../core/constants/colors.dart';
 import '../../../core/constants/text_styles.dart';
-import '../../../core/utils/rank_system.dart';
+import '../../../data/models/leaderboard_model.dart';
+import '../../../data/models/user_model.dart';
 import '../../../providers/leaderboard_providers.dart';
 import '../../../providers/user_providers.dart';
-import '../../../data/models/leaderboard_model.dart';
+import '../../../core/utils/rank_system.dart';
+import 'dart:math' as math;
 import '../../widgets/smart_avatar.dart';
+import '../../widgets/player_profile_dialog.dart';
 
 enum _LeaderboardFilter {
   level('Level'),
@@ -29,177 +32,320 @@ class LeaderboardTab extends ConsumerStatefulWidget {
 }
 
 class _LeaderboardTabState extends ConsumerState<LeaderboardTab> {
+  bool _isGlobal = true;
   _LeaderboardFilter _selectedFilter = _LeaderboardFilter.level;
 
   @override
   Widget build(BuildContext context) {
     final leaderboardAsync = ref.watch(leaderboardProvider);
-    final weeklyMvp = ref.watch(weeklyMvpProvider);
+    final friendsAsync = ref.watch(friendsProvider);
     final currentUser = ref.watch(currentUserProvider).value;
 
-    return leaderboardAsync.when(
-      loading: () => const Center(
-        child: CircularProgressIndicator(color: AppColors.gold),
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(
+        title: Text('ARENA RANKS',
+            style:
+                AppTextStyles.display.copyWith(fontSize: 18, letterSpacing: 2)),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: true,
       ),
-      error: (e, s) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text(
-            'Failed to load leaderboard: $e',
-            style: AppTextStyles.bodyMd.copyWith(color: AppColors.red),
-            textAlign: TextAlign.center,
+      body: Column(
+        children: [
+          _buildToggle(),
+          _buildFilterRow(),
+          Expanded(
+            child: _isGlobal
+                ? _buildLeaderboard(leaderboardAsync, currentUser)
+                : _buildFriendsLeaderboard(friendsAsync, currentUser),
           ),
-        ),
+        ],
       ),
+    );
+  }
+
+  Widget _buildToggle() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: AppColors.cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.surface),
+      ),
+      child: Row(
+        children: [
+          _ToggleItem(
+            label: 'GLOBAL',
+            isSelected: _isGlobal,
+            onTap: () => setState(() => _isGlobal = true),
+          ),
+          _ToggleItem(
+            label: 'FRIENDS',
+            isSelected: !_isGlobal,
+            onTap: () => setState(() => _isGlobal = false),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterRow() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              'SORT BY',
+              style: AppTextStyles.label.copyWith(
+                color: AppColors.textSecondary,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 2,
+              ),
+            ),
+          ),
+          _FilterDropdown(
+            value: _selectedFilter,
+            onChanged: (filter) {
+              setState(() => _selectedFilter = filter);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLeaderboard(AsyncValue<List<LeaderboardModel>> leaderboardAsync,
+      UserModel? currentUser) {
+    return leaderboardAsync.when(
+      loading: () =>
+          const Center(child: CircularProgressIndicator(color: AppColors.gold)),
+      error: (e, s) => Center(child: Text('Error: $e')),
       data: (players) {
+        if (players.isEmpty) return const Center(child: Text('No data found'));
         final sortedPlayers = List<LeaderboardModel>.from(players)
           ..sort((a, b) => _comparePlayers(a, b, _selectedFilter));
-
-        return CustomScrollView(
-          slivers: [
-            if (weeklyMvp != null)
-              SliverToBoxAdapter(child: _MvpCard(player: weeklyMvp)),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 32, 24, 16),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'GLOBAL LEADERBOARD',
-                        style: AppTextStyles.label.copyWith(
-                          letterSpacing: 2,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    _FilterDropdown(
-                      value: _selectedFilter,
-                      onChanged: (filter) {
-                        setState(() => _selectedFilter = filter);
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    final player = sortedPlayers[index];
-                    final isMe = player.uid == currentUser?.uid;
-
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: isMe
-                            ? AppColors.purple.withValues(alpha: 0.2)
-                            : AppColors.cardBg,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: isMe ? AppColors.purple : AppColors.surface,
-                          width: isMe ? 2 : 1,
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          SizedBox(width: 40, child: _RankBadge(index: index)),
-                          SmartAvatar(
-                            avatarUrl: player.avatarUrl,
-                            size: 40,
-                            showBorder: false,
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  player.username,
-                                  style: AppTextStyles.bodyMd.copyWith(
-                                    fontWeight: isMe
-                                        ? FontWeight.bold
-                                        : FontWeight.normal,
-                                    color: isMe
-                                        ? AppColors.gold
-                                        : AppColors.textPrimary,
-                                  ),
-                                ),
-                                Text(
-                                  'LVL ${player.level} • ${RankSystem.getRankName(player.rank, player.subRank)}',
-                                  style: AppTextStyles.label
-                                      .copyWith(fontSize: 10),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                _metricValue(player, _selectedFilter),
-                                style: AppTextStyles.headline.copyWith(
-                                  fontSize: 18,
-                                  color: AppColors.gold,
-                                ),
-                              ),
-                              Text(
-                                _selectedFilter.label.toUpperCase(),
-                                style:
-                                    AppTextStyles.label.copyWith(fontSize: 8),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ).animate().fadeIn(delay: (index * 50).ms).slideX(
-                          begin: 0.1,
-                          end: 0,
-                        );
-                  },
-                  childCount: sortedPlayers.length,
-                ),
-              ),
-            ),
-            const SliverToBoxAdapter(child: SizedBox(height: 40)),
-          ],
+        return ListView.builder(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          itemCount: sortedPlayers.length,
+          itemBuilder: (context, index) {
+            final player = sortedPlayers[index];
+            final isMe = player.uid == currentUser?.uid;
+            return _LeaderboardItem(
+              player: player,
+              rank: index + 1,
+              isMe: isMe,
+              filter: _selectedFilter,
+            );
+          },
         );
       },
     );
   }
 
-  int _comparePlayers(
-    LeaderboardModel a,
-    LeaderboardModel b,
-    _LeaderboardFilter filter,
-  ) {
-    final comparison = switch (filter) {
-      _LeaderboardFilter.level => b.level.compareTo(a.level),
-      _LeaderboardFilter.xp => b.xp.compareTo(a.xp),
-      _LeaderboardFilter.league => b.rankStrength.compareTo(a.rankStrength),
-      _LeaderboardFilter.wins => b.wins.compareTo(a.wins),
-      _LeaderboardFilter.elo => b.eloRating.compareTo(a.eloRating),
-    };
+  Widget _buildFriendsLeaderboard(
+      AsyncValue<List<LeaderboardModel>> friendsAsync, UserModel? currentUser) {
+    final incomingRequestsAsync = ref.watch(incomingRequestsProvider);
 
-    if (comparison != 0) return comparison;
-    return b.xp.compareTo(a.xp);
+    return Column(
+      children: [
+        incomingRequestsAsync.when(
+          data: (requests) {
+            if (requests.isEmpty) return const SizedBox.shrink();
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('FRIEND REQUESTS',
+                      style: AppTextStyles.label.copyWith(letterSpacing: 2)),
+                  const SizedBox(height: 12),
+                  ...requests.map((r) {
+                    final data = r.data();
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.cardBg,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                            color: AppColors.gold.withValues(alpha: 0.5)),
+                      ),
+                      child: Row(
+                        children: [
+                          SmartAvatar(
+                              avatarUrl: data['senderAvatar'], size: 40),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(data['senderUsername'],
+                                    style: AppTextStyles.bodyMd
+                                        .copyWith(fontWeight: FontWeight.bold)),
+                                Text('wants to be friends',
+                                    style: AppTextStyles.label
+                                        .copyWith(fontSize: 10)),
+                              ],
+                            ),
+                          ),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.check_circle_rounded,
+                                    color: AppColors.teal),
+                                onPressed: () => ref
+                                    .read(friendsRepositoryProvider)
+                                    .acceptFriendRequest(r.id, data),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.cancel_rounded,
+                                    color: AppColors.red),
+                                onPressed: () => ref
+                                    .read(friendsRepositoryProvider)
+                                    .rejectFriendRequest(r.id),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                  const Divider(color: AppColors.surface, height: 32),
+                ],
+              ),
+            );
+          },
+          loading: () => const SizedBox.shrink(),
+          error: (_, __) => const SizedBox.shrink(),
+        ),
+        Expanded(
+          child: friendsAsync.when(
+            loading: () => const Center(
+                child: CircularProgressIndicator(color: AppColors.gold)),
+            error: (e, s) => Center(child: Text('Error: $e')),
+            data: (friends) {
+              final List<LeaderboardModel> all = List.from(friends);
+              if (currentUser != null) {
+                all.add(LeaderboardModel(
+                  uid: currentUser.uid,
+                  username: currentUser.username,
+                  avatarUrl: currentUser.avatarUrl,
+                  xp: currentUser.xp,
+                  level: currentUser.level,
+                  rank: currentUser.rank,
+                  subRank: currentUser.subRank ?? 0,
+                  eloRating: currentUser.eloRating,
+                  wins: currentUser.wins,
+                ));
+              }
+              all.sort((a, b) => _comparePlayers(a, b, _selectedFilter));
+
+              if (all.isEmpty)
+                return const Center(
+                    child: Text('Add friends to compare ranks!'));
+
+              return ListView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                itemCount: all.length,
+                itemBuilder: (context, index) {
+                  final player = all[index];
+                  final isMe = player.uid == currentUser?.uid;
+                  return _LeaderboardItem(
+                    player: player,
+                    rank: index + 1,
+                    isMe: isMe,
+                    filter: _selectedFilter,
+                  );
+                },
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ToggleItem extends StatelessWidget {
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+  const _ToggleItem(
+      {required this.label, required this.isSelected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: isSelected ? AppColors.purple : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Center(
+            child: Text(
+              label,
+              style: AppTextStyles.label.copyWith(
+                color: isSelected ? Colors.white : AppColors.textSecondary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+int _comparePlayers(
+  LeaderboardModel a,
+  LeaderboardModel b,
+  _LeaderboardFilter filter,
+) {
+  int primary;
+  switch (filter) {
+    case _LeaderboardFilter.level:
+      primary = b.level.compareTo(a.level);
+      break;
+    case _LeaderboardFilter.xp:
+      primary = b.xp.compareTo(a.xp);
+      break;
+    case _LeaderboardFilter.league:
+      primary = b.rankStrength.compareTo(a.rankStrength);
+      break;
+    case _LeaderboardFilter.wins:
+      primary = b.wins.compareTo(a.wins);
+      break;
+    case _LeaderboardFilter.elo:
+      primary = b.eloRating.compareTo(a.eloRating);
+      break;
   }
 
-  String _metricValue(
-    LeaderboardModel player,
-    _LeaderboardFilter filter,
-  ) {
-    return switch (filter) {
-      _LeaderboardFilter.level => '${player.level}',
-      _LeaderboardFilter.xp => '${player.xp}',
-      _LeaderboardFilter.league =>
-        RankSystem.getRankName(player.rank, player.subRank),
-      _LeaderboardFilter.wins => '${player.wins}',
-      _LeaderboardFilter.elo => '${player.eloRating}',
-    };
+  if (primary != 0) return primary;
+  final xpTieBreak = b.xp.compareTo(a.xp);
+  if (xpTieBreak != 0) return xpTieBreak;
+  return a.username.toLowerCase().compareTo(b.username.toLowerCase());
+}
+
+String _metricValue(LeaderboardModel player, _LeaderboardFilter filter) {
+  switch (filter) {
+    case _LeaderboardFilter.level:
+      return '${player.level}';
+    case _LeaderboardFilter.xp:
+      return '${player.xp}';
+    case _LeaderboardFilter.league:
+      return RankSystem.getRankName(player.rank, player.subRank);
+    case _LeaderboardFilter.wins:
+      return '${player.wins}';
+    case _LeaderboardFilter.elo:
+      return '${player.eloRating}';
   }
 }
 
@@ -215,22 +361,19 @@ class _FilterDropdown extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
       decoration: BoxDecoration(
         color: AppColors.cardBg,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.purple),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.purple.withValues(alpha: 0.55)),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<_LeaderboardFilter>(
           value: value,
           dropdownColor: AppColors.cardBg,
-          icon: const Icon(
-            Icons.keyboard_arrow_down,
-            color: AppColors.gold,
-          ),
+          iconEnabledColor: AppColors.gold,
           style: AppTextStyles.label.copyWith(
-            color: AppColors.textPrimary,
+            color: Colors.white,
             fontWeight: FontWeight.bold,
           ),
           items: _LeaderboardFilter.values
@@ -250,127 +393,92 @@ class _FilterDropdown extends StatelessWidget {
   }
 }
 
-class _MvpCard extends StatelessWidget {
+class _LeaderboardItem extends StatelessWidget {
   final LeaderboardModel player;
+  final int rank;
+  final bool isMe;
+  final _LeaderboardFilter filter;
 
-  const _MvpCard({required this.player});
+  const _LeaderboardItem({
+    required this.player,
+    required this.rank,
+    required this.isMe,
+    required this.filter,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            AppColors.gold.withValues(alpha: 0.2),
-            AppColors.purple.withValues(alpha: 0.1),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+    final rankColor = rank == 1
+        ? AppColors.gold
+        : (rank == 2
+            ? Colors.white70
+            : (rank == 3 ? Colors.brown : AppColors.textMuted));
+
+    return GestureDetector(
+      onTap: () => PlayerProfileDialog.show(context,
+          uid: player.uid, player: player, isMe: isMe),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color:
+              isMe ? AppColors.purple.withValues(alpha: 0.1) : AppColors.cardBg,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+              color: isMe ? AppColors.purple : AppColors.surface,
+              width: isMe ? 1.5 : 1),
         ),
-        borderRadius: BorderRadius.circular(24),
-        border:
-            Border.all(color: AppColors.gold.withValues(alpha: 0.5), width: 2),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.gold.withValues(alpha: 0.1),
-            blurRadius: 20,
-            spreadRadius: 5,
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              SmartAvatar(
-                avatarUrl: player.avatarUrl,
-                size: 80,
-                showGlow: true,
-                showBorder: true,
+        child: Row(
+          children: [
+            SizedBox(
+              width: 30,
+              child: Text('#$rank',
+                  style: AppTextStyles.headline
+                      .copyWith(fontSize: 14, color: rankColor)),
+            ),
+            SmartAvatar(
+              avatarUrl: player.avatarUrl,
+              size: 44,
+              borderId: player.selectedBorder,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(player.username,
+                      style: AppTextStyles.bodyMd.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: isMe ? AppColors.purple : Colors.white)),
+                  Text(
+                      'LVL ${player.level} • ${RankSystem.getRankName(player.rank, player.subRank)}',
+                      style: AppTextStyles.label.copyWith(fontSize: 10)),
+                ],
               ),
-              const Positioned(
-                top: -5,
-                child: Icon(
-                  Icons.workspace_premium,
-                  color: AppColors.gold,
-                  size: 28,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(width: 20),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  'WEEKLY MVP',
-                  style: AppTextStyles.label.copyWith(
+                  _metricValue(player, filter),
+                  style: AppTextStyles.headline.copyWith(
+                    fontSize: 16,
                     color: AppColors.gold,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 2,
                   ),
+                  textAlign: TextAlign.right,
                 ),
-                const SizedBox(height: 4),
                 Text(
-                  player.username,
-                  style: AppTextStyles.display.copyWith(fontSize: 24),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${player.wins} WINS THIS WEEK',
-                  style: AppTextStyles.label.copyWith(
-                    color: AppColors.teal,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  filter.label.toUpperCase(),
+                  style: AppTextStyles.label.copyWith(fontSize: 8),
                 ),
               ],
             ),
-          ),
-        ],
+          ],
+        ),
       ),
-    ).animate().shimmer(duration: 2.seconds).scale(
-          duration: 600.ms,
-          curve: Curves.easeOutBack,
-        );
-  }
-}
-
-class _RankBadge extends StatelessWidget {
-  final int index;
-
-  const _RankBadge({required this.index});
-
-  @override
-  Widget build(BuildContext context) {
-    if (index == 0) {
-      return const Icon(Icons.workspace_premium,
-          color: AppColors.gold, size: 28);
-    }
-    if (index == 1) {
-      return const Icon(
-        Icons.workspace_premium,
-        color: AppColors.rankSilver,
-        size: 24,
-      );
-    }
-    if (index == 2) {
-      return const Icon(
-        Icons.workspace_premium,
-        color: AppColors.rankBronze,
-        size: 24,
-      );
-    }
-
-    return Text(
-      '${index + 1}',
-      style: AppTextStyles.headline.copyWith(
-        fontSize: 18,
-        color: AppColors.textMuted,
-      ),
-    );
+    )
+        .animate()
+        .fadeIn(delay: (math.min(rank, 10) * 50).ms)
+        .slideX(begin: 0.1, end: 0);
   }
 }
