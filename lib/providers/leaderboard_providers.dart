@@ -23,9 +23,13 @@ final weeklyMvpProvider = Provider.autoDispose<LeaderboardModel?>((ref) {
   final players = ref.watch(leaderboardProvider).value ?? [];
   if (players.isEmpty) return null;
 
-  // Sort by mvpScore descending and pick the top one
+  // Weekly MVP remains win-based regardless of the leaderboard filter.
   final sortedPlayers = List<LeaderboardModel>.from(players);
-  sortedPlayers.sort((a, b) => b.mvpScore.compareTo(a.mvpScore));
+  sortedPlayers.sort((a, b) {
+    final winsCompare = b.wins.compareTo(a.wins);
+    if (winsCompare != 0) return winsCompare;
+    return b.mvpScore.compareTo(a.mvpScore);
+  });
 
   return sortedPlayers.first;
 });

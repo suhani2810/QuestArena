@@ -9,11 +9,30 @@ import '../../../providers/user_providers.dart';
 import '../../../data/models/leaderboard_model.dart';
 import '../../widgets/smart_avatar.dart';
 
-class LeaderboardTab extends ConsumerWidget {
+enum _LeaderboardFilter {
+  level('Level'),
+  xp('XP'),
+  league('League'),
+  wins('Wins'),
+  elo('ELO');
+
+  final String label;
+
+  const _LeaderboardFilter(this.label);
+}
+
+class LeaderboardTab extends ConsumerStatefulWidget {
   const LeaderboardTab({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<LeaderboardTab> createState() => _LeaderboardTabState();
+}
+
+class _LeaderboardTabState extends ConsumerState<LeaderboardTab> {
+  _LeaderboardFilter _selectedFilter = _LeaderboardFilter.level;
+
+  @override
+  Widget build(BuildContext context) {
     final leaderboardAsync = ref.watch(leaderboardProvider);
     final weeklyMvp = ref.watch(weeklyMvpProvider);
     final currentUser = ref.watch(currentUserProvider).value;
@@ -33,6 +52,9 @@ class LeaderboardTab extends ConsumerWidget {
         ),
       ),
       data: (players) {
+        final sortedPlayers = List<LeaderboardModel>.from(players)
+          ..sort((a, b) => _comparePlayers(a, b, _selectedFilter));
+
         return CustomScrollView(
           slivers: [
             if (weeklyMvp != null)
@@ -40,12 +62,24 @@ class LeaderboardTab extends ConsumerWidget {
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(24, 32, 24, 16),
-                child: Text(
-                  'GLOBAL LEADERBOARD',
-                  style: AppTextStyles.label.copyWith(
-                    letterSpacing: 2,
-                    fontWeight: FontWeight.bold,
-                  ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'GLOBAL LEADERBOARD',
+                        style: AppTextStyles.label.copyWith(
+                          letterSpacing: 2,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    _FilterDropdown(
+                      value: _selectedFilter,
+                      onChanged: (filter) {
+                        setState(() => _selectedFilter = filter);
+                      },
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -54,7 +88,7 @@ class LeaderboardTab extends ConsumerWidget {
               sliver: SliverList(
                 delegate: SliverChildBuilderDelegate(
                   (context, index) {
-                    final player = players[index];
+                    final player = sortedPlayers[index];
                     final isMe = player.uid == currentUser?.uid;
 
                     return Container(
@@ -106,14 +140,14 @@ class LeaderboardTab extends ConsumerWidget {
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
                               Text(
-                                '${player.wins}',
+                                _metricValue(player, _selectedFilter),
                                 style: AppTextStyles.headline.copyWith(
                                   fontSize: 18,
                                   color: AppColors.gold,
                                 ),
                               ),
                               Text(
-                                'WINS',
+                                _selectedFilter.label.toUpperCase(),
                                 style:
                                     AppTextStyles.label.copyWith(fontSize: 8),
                               ),
@@ -126,7 +160,7 @@ class LeaderboardTab extends ConsumerWidget {
                           end: 0,
                         );
                   },
-                  childCount: players.length,
+                  childCount: sortedPlayers.length,
                 ),
               ),
             ),
@@ -134,6 +168,84 @@ class LeaderboardTab extends ConsumerWidget {
           ],
         );
       },
+    );
+  }
+
+  int _comparePlayers(
+    LeaderboardModel a,
+    LeaderboardModel b,
+    _LeaderboardFilter filter,
+  ) {
+    final comparison = switch (filter) {
+      _LeaderboardFilter.level => b.level.compareTo(a.level),
+      _LeaderboardFilter.xp => b.xp.compareTo(a.xp),
+      _LeaderboardFilter.league => b.rankStrength.compareTo(a.rankStrength),
+      _LeaderboardFilter.wins => b.wins.compareTo(a.wins),
+      _LeaderboardFilter.elo => b.eloRating.compareTo(a.eloRating),
+    };
+
+    if (comparison != 0) return comparison;
+    return b.xp.compareTo(a.xp);
+  }
+
+  String _metricValue(
+    LeaderboardModel player,
+    _LeaderboardFilter filter,
+  ) {
+    return switch (filter) {
+      _LeaderboardFilter.level => '${player.level}',
+      _LeaderboardFilter.xp => '${player.xp}',
+      _LeaderboardFilter.league =>
+        RankSystem.getRankName(player.rank, player.subRank),
+      _LeaderboardFilter.wins => '${player.wins}',
+      _LeaderboardFilter.elo => '${player.eloRating}',
+    };
+  }
+}
+
+class _FilterDropdown extends StatelessWidget {
+  final _LeaderboardFilter value;
+  final ValueChanged<_LeaderboardFilter> onChanged;
+
+  const _FilterDropdown({
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: AppColors.cardBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.purple),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<_LeaderboardFilter>(
+          value: value,
+          dropdownColor: AppColors.cardBg,
+          icon: const Icon(
+            Icons.keyboard_arrow_down,
+            color: AppColors.gold,
+          ),
+          style: AppTextStyles.label.copyWith(
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.bold,
+          ),
+          items: _LeaderboardFilter.values
+              .map(
+                (filter) => DropdownMenuItem(
+                  value: filter,
+                  child: Text(filter.label),
+                ),
+              )
+              .toList(),
+          onChanged: (filter) {
+            if (filter != null) onChanged(filter);
+          },
+        ),
+      ),
     );
   }
 }
